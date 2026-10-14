@@ -1,18 +1,18 @@
 # 独立工具发布说明
 
-当前版本为 **0.1.1**，发布范围为 Kea2 许可允许的内部使用。产物是 Python 应用包，依赖 Python、ADB 和官方 Kea2 SDK；Windows 和 macOS 均无需依赖原开发目录或其他专项工具。工具不是捆绑 Python/ADB 的免安装桌面程序。
+当前版本为 **0.1.2**，发布范围为 Kea2 许可允许的内部使用。产物是 Python 应用包，依赖 Python、ADB 和官方 Kea2 SDK；Windows 和 macOS 均无需依赖原开发目录或其他专项工具。工具不是捆绑 Python/ADB 的免安装桌面程序。
 
 ## 发布内容
 
 | 文件 | 用途 |
 |---|---|
-| `kea2_workbench-0.1.1.tar.gz` | 源码分发包：应用、网页资源、默认设置、官方 `configs/`、样例、两系统指南、测试与许可 |
-| `kea2_workbench-0.1.1-py3-none-any.whl` | 应用安装包：应用、网页资源、内置默认设置及许可；工作目录需另行执行 `kea2 init` |
+| `kea2_workbench-0.1.2.tar.gz` | 源码分发包：应用、网页资源、默认设置、官方 `configs/`、双击启动脚本、两系统指南、测试与许可 |
+| `kea2_workbench-0.1.2-py3-none-any.whl` | 应用安装包：应用、网页资源、内置默认设置及许可；工作目录需另行执行 `kea2 init` |
 | `SHA256SUMS.txt` | 两个分发包的 SHA-256 校验值，用于核对传输完整性 |
 
-源码包推荐用于首次部署，解压后可以直接以其根目录作为工作目录。wheel 适合把应用安装到虚拟环境后另建数据目录。`py3-none-any` 仅指工作台自身使用通用 Python 包，不表示依赖已离线捆绑或所有平台均完成真机验收。
+源码包推荐用于首次部署，解压后双击 `start-windows.bat` 或 `start-macos.command` 自动安装依赖、准备 ADB 并打开工作台。启动脚本及共享的 `launch_workbench.py` 随源码包分发，macOS 脚本保留可执行权限；wheel 使用已有文档中的命令启动，不包含源码根目录的双击入口。`py3-none-any` 仅指工作台自身使用通用 Python 包，不表示依赖已离线捆绑或所有平台均完成真机验收。
 
-分发包不包含 `.venv/`、`data/`、`artifacts/`、本机 MinIO 密钥、个人设备报告或其他工程。示例文件含内部开发环境的地址与登记 ID，不包含访问密钥；分发对象应为获准使用该环境的人员。
+分发包不包含 `.venv/`、`data/`、`artifacts/`、`tools/` 下载缓存、本机 MinIO 密钥、个人设备报告或其他工程。示例文件含内部开发环境的地址与登记 ID，不包含访问密钥；分发对象应为获准使用该环境的人员。
 
 ## 构建
 
@@ -46,13 +46,13 @@ py -3 -m venv .venv
 from hashlib import sha256
 from pathlib import Path
 
-packages = sorted(Path("dist").glob("kea2_workbench-0.1.1*"))
+packages = sorted(Path("dist").glob("kea2_workbench-0.1.2*"))
 lines = [f"{sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in packages
          if p.suffix in {".whl", ".gz"}]
 Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 ```
 
-检查源码包包含 `docs/`、`configs/`、`settings.example.json`、`THIRD_PARTY_LICENSE.txt` 和测试；检查 wheel 包含 `kea_workbench/static/` 和 `kea_workbench/settings.example.json`。必须在源码目录外的空工作目录安装一次 wheel，初始化并启动，避免本机源码或设置文件掩盖缺失资源。
+检查源码包包含 `docs/`、`configs/`、三个启动文件、`settings.example.json`、`THIRD_PARTY_LICENSE.txt` 和测试，并核验 `start-macos.command` 的可执行位；检查 wheel 包含 `kea_workbench/static/` 和 `kea_workbench/settings.example.json`。必须在源码目录外的空工作目录安装一次 wheel，初始化并启动，避免本机源码或设置文件掩盖缺失资源。
 
 ## 内部分发与安装
 
@@ -67,13 +67,13 @@ Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8"
 1. 在与目标机匹配的联网环境执行：
 
    ```sh
-   python -m pip download --index-url https://pypi.org/simple --only-binary=:all: --dest wheelhouse ./kea2_workbench-0.1.1-py3-none-any.whl
+   python -m pip download --index-url https://pypi.org/simple --only-binary=:all: --dest wheelhouse ./kea2_workbench-0.1.2-py3-none-any.whl
    ```
 
 2. 将工作台 wheel 和 `wheelhouse/` 一并传到离线机，以目标虚拟环境解释器执行：
 
    ```sh
-   python -m pip install --no-index --find-links=wheelhouse ./kea2_workbench-0.1.1-py3-none-any.whl
+   python -m pip install --no-index --find-links=wheelhouse ./kea2_workbench-0.1.2-py3-none-any.whl
    ```
 
 3. 初始化数据目录并按系统指南启动。ADB 也需另行准备；离线平台上报仅在目标机可访问内部平台/MinIO 时可用。
@@ -110,6 +110,8 @@ Windows：
 
 自动测试覆盖参数、上报资格、回执、报告、服务与后台停止/同步，并模拟 Windows 子进程组和停止信号分支；不连接真实手机、平台或 MinIO。当前验证环境为 macOS，Windows 真机验收尚未在本次工作环境执行。
 
+0.1.2 在 macOS 验证了源码包双击入口的首次完整安装（使用中文和空格路径）、服务就绪后调用浏览器、重复启动复用服务、Ctrl+C 退出及同端口快速重启复用依赖。浏览器调用使用替身验证，未自动开启真实浏览器。官方 macOS Platform-Tools 下载、解压和 ADB 执行通过；Windows Platform-Tools 下载及解压通过，Windows 双击入口未在真实 Windows 环境执行。自动化测试还覆盖启动锁、端口占用、服务身份核验和缺失 ADB 时使用虚拟环境 CA 证书的分支。
+
 0.1.1 已在 macOS / Python 3.14 的全新虚拟环境中验证源码包完整安装（含隔离构建和全部运行依赖）、`pip check`、命令入口、HTTP 页面/API 及正常退出。验证时将默认包源设为清华镜像，安装命令显式指定官方 PyPI，确认构建子进程也能成功获取依赖。
 
 维护者应在拟分发的 Windows 与 macOS 环境各执行以下验收并保留结果：
@@ -117,6 +119,7 @@ Windows：
 | 验收项 | 预期 |
 |---|---|
 | 干净环境安装并启动源码包/wheel | 无开发机路径依赖，页面和设置正常，wheel 工作目录 `init` 后可执行 |
+| 双击入口首次与再次启动 | 缺失依赖/ADB 自动安装，已就绪环境复用；服务启动后打开页面；重复双击不创建第二个服务 |
 | `adb devices -l` 与 App 查询 | 状态 `device`，指定包名返回安装路径 |
 | 关闭上报执行短测试 | 有探索日志，正常结束，可查看本地完整报告和日志 |
 | 运行期间点击停止 | Kea2 收尾、最终状态已取消，报告可查看，设备无残留控制进程 |

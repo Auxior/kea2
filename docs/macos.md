@@ -1,6 +1,6 @@
 # macOS 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.1 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.2 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -8,7 +8,7 @@
 |---|---|
 | 系统 | 推荐使用受所选 Python 支持的 macOS；Intel 和 Apple Silicon 应安装对应架构的 Python/依赖，工作目录可写 |
 | Python | Python 3.11 或更高版本，`python3 --version` 必须满足要求，不依赖系统自带 Python |
-| ADB | 官方 [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) 的 macOS 版，包含 `adb` 的目录加入 PATH；`adb version` 能执行 |
+| ADB | 双击脚本可自动下载缺失的 ADB；手动启动需安装官方 [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) 的 macOS 版，包含 `adb` 的目录加入 PATH，确认 `adb version` 能执行 |
 | Android 设备 | 开启开发者选项、USB 调试并授权本机；被测 App 已安装，登录与权限已准备好 |
 | 浏览器 | 当前版本的 Safari、Chrome、Edge 或 Firefox |
 | 网络和空间 | 安装需要访问 Python 包源；上报需要访问测试平台与 MinIO；电脑和手机预留日志、截图空间 |
@@ -28,9 +28,33 @@ command -v adb
 
 ## 2. 安装和配置
 
+### 推荐：双击自动准备和启动
+
+完整解压 0.1.2 源码包后，双击根目录的 `start-macos.command`，在 Terminal 中自动启动。需先安装 Python 3.11+；脚本会查找已有虚拟环境和 PATH 中的 Python，并兼容 Homebrew 常用目录。脚本以自身所在目录作为工作目录，支持含空格和中文的路径。
+
+启动过程自动创建或复用 `.venv`，核验应用版本、直接依赖和依赖完整性；需要安装时使用官方 PyPI。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 macOS Platform-Tools 到本工具 `tools/`，不会更改系统配置。若 `configs/` 缺失会自动初始化。服务就绪后打开默认浏览器，默认地址 `http://127.0.0.1:4320/`。
+
+首次准备需要访问官方 PyPI 和（ADB 缺失时）Google 下载服务，安装完成后依赖版本一致则直接复用。Python 本身需预装；无需先连接手机即可打开工作台。失败时 Terminal 保留错误和安装日志。若 `.command` 丢失可执行权限，在源码根目录执行一次：
+
+```sh
+chmod +x start-macos.command
+```
+
+若系统安全设置阻止打开，请对可信来源的脚本使用 Finder 中的“打开”或系统设置允许该脚本运行。跨系统复制的 `.venv` 无法使用时，先重命名该目录再重新启动；保持源码包文件完整，不要只移动脚本。
+
+重复双击只打开本目录已有服务的页面，正在准备时提示返回已有窗口。端口被其他应用占用时不会打开该应用；必要时从 Terminal 指定端口和包源：
+
+```sh
+KEA2_PORT=4321 KEA2_PIP_INDEX_URL=https://pypi.org/simple ./start-macos.command
+```
+
+保持启动 Terminal 打开。退出前先在网页停止测试并等待报告、最终同步，再按一次 Ctrl+C；脚本会等待服务正常清理。浏览器未能自动打开时，复制窗口打印的 URL 手动访问，服务仍会运行。
+
+以下是手动安装方式；使用源码包双击启动无需逐条执行。
+
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.1.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.2.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```sh
 cd "$HOME/Tools/kea2-workbench"
@@ -59,7 +83,7 @@ python3 -m venv .venv
 mkdir -p "$HOME/Kea2Data"
 cd "$HOME/Kea2Data"
 python3 -m venv .venv
-./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.1-py3-none-any.whl
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.2-py3-none-any.whl
 ./.venv/bin/python -m kea2.cli init
 ```
 

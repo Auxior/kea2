@@ -1,6 +1,6 @@
 # Windows 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.1 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.2 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -8,7 +8,7 @@
 |---|---|
 | 系统 | 推荐 Windows 10 / 11 64 位；需有可写工作目录和正常的控制台会话 |
 | Python | 3.11 或更高版本，推荐使用 64 位 Python；`py -3 --version` 必须满足要求 |
-| ADB | 安装官方 [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools)，将包含 `adb.exe` 的目录加入 PATH；`adb version` 能执行 |
+| ADB | 双击脚本可自动下载缺失的 ADB；手动启动需安装官方 [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools)，将包含 `adb.exe` 的目录加入 PATH，确认 `adb version` 能执行 |
 | 设备驱动 | 根据手机厂商安装 Windows USB/ADB 驱动，设备管理器能识别 Android 调试设备 |
 | Android 设备 | 已开启开发者选项、USB 调试并授权本机；被测 App 已安装，已完成测试需要的登录与权限授予 |
 | 浏览器 | 当前版本的 Edge、Chrome 或 Firefox |
@@ -20,9 +20,29 @@
 
 ## 2. 安装和配置
 
+### 推荐：双击自动准备和启动
+
+完整解压 0.1.2 源码包后，双击根目录的 `start-windows.bat`。先安装 Python 3.11+（包含 Python Launcher 或加入 PATH）。脚本自动使用自身所在目录，不受资源管理器当前目录影响，也支持含空格和中文的路径。
+
+启动过程会检查 Python 版本，在本工具目录创建或复用 `.venv`，检查应用版本、直接依赖和依赖完整性；需要安装时通过官方 PyPI 更新。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 Windows Platform-Tools 到 `tools/`，不会更改系统 PATH。如果 `configs/` 缺失，也会自动初始化。服务就绪后打开默认浏览器，默认地址仍为 `http://127.0.0.1:4320/`。
+
+首次准备需要访问官方 PyPI 和（ADB 缺失时）Google 下载服务。已安装且版本一致的依赖会复用，后续启动不需要重新联网下载。Python 和手机厂商 USB 驱动需预先安装；手机尚未连接也可以打开工作台。失败时窗口保留错误和安装日志，按提示排查后重试。跨系统复制的 `.venv` 无法使用时，先将其重命名，再重新双击；不要只复制脚本。
+
+同一目录已由脚本启动且端口相同时，重复双击只打开已有页面，不重复启动服务；已有窗口仍在准备时会提示返回该窗口。端口被其他应用占用时不会打开其他服务。若需更换端口或包源，可在 PowerShell 设置当前会话变量后运行：
+
+```powershell
+$env:KEA2_PORT = '4321'
+$env:KEA2_PIP_INDEX_URL = 'https://pypi.org/simple'
+.\start-windows.bat
+```
+
+服务启动后请保持窗口打开；退出前先在网页停止测试并等待上报，再按一次 Ctrl+C。安装失败、ADB 下载失败或浏览器无法打开时，可查看窗口提示；浏览器失败不影响已启动的服务，可以手动打开打印的 URL。
+
+以下是手动安装方式；使用源码包双击启动时无需逐条执行。
+
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.1.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.2.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```powershell
 Set-Location 'C:\Tools\kea2-workbench'
@@ -47,7 +67,7 @@ wheel 只包含应用和默认连接配置，不含工作目录的官方配置�
 New-Item -ItemType Directory -Force 'C:\Tools\Kea2Data'
 Set-Location 'C:\Tools\Kea2Data'
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .\kea2_workbench-0.1.1-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .\kea2_workbench-0.1.2-py3-none-any.whl
 .\.venv\Scripts\python.exe -m kea2.cli init
 ```
 
