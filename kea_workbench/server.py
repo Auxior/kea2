@@ -25,6 +25,10 @@ def create_app(root=None):
     app.state.manager = manager
     static = Path(__file__).parent / "static"
 
+    @app.get("/api/health")
+    def health():
+        return {"application": "kea2-workbench", "root": str(root)}
+
     @app.get("/api/config")
     def configuration():
         return {
