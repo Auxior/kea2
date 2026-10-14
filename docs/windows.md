@@ -1,6 +1,6 @@
 # Windows 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.0 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.1 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -22,20 +22,22 @@
 
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.0.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.1.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```powershell
 Set-Location 'C:\Tools\kea2-workbench'
 py -3 --version
 adb version
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple --upgrade pip
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .
 .\.venv\Scripts\python.exe -m kea_workbench --help
 .\.venv\Scripts\python.exe -m kea2.cli version
 ```
 
 最后一条应输出 Kea2 `1.2.4`。使用完整的虚拟环境解释器路径，不需要激活环境或修改 PowerShell 执行策略。源码包已提供 `configs/`，无需再次初始化。
+
+安装命令显式使用官方 PyPI，覆盖本机的默认镜像，并供隔离构建子进程下载 `setuptools>=77`。如果此前未指定源而出现 `No matching distribution found for setuptools>=77`，按上述命令重新执行安装即可，无需删除 `.venv`。不要降低构建依赖版本来绕过镜像故障；若官方源不可访问，替换为组织提供的可用包源，或使用[离线安装](release.md#离线安装)。
 
 ### 使用 wheel 分发包
 
@@ -45,7 +47,7 @@ wheel 只包含应用和默认连接配置，不含工作目录的官方配置�
 New-Item -ItemType Directory -Force 'C:\Tools\Kea2Data'
 Set-Location 'C:\Tools\Kea2Data'
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install .\kea2_workbench-0.1.0-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .\kea2_workbench-0.1.1-py3-none-any.whl
 .\.venv\Scripts\python.exe -m kea2.cli init
 ```
 

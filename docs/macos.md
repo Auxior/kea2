@@ -1,6 +1,6 @@
 # macOS 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.0 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.1 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -30,18 +30,26 @@ command -v adb
 
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.0.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.1.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```sh
 cd "$HOME/Tools/kea2-workbench"
 python3 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install .
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple --upgrade pip
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple .
 ./.venv/bin/python -m kea_workbench --help
 ./.venv/bin/python -m kea2.cli version
 ```
 
 最后一条应输出 `1.2.4`。使用虚拟环境中解释器的完整路径，无需激活环境；源码包已包含 `configs/`，无需再次执行初始化。
+
+安装命令显式使用官方 PyPI，覆盖本机配置的默认镜像，并将该源传递给隔离构建子进程。已有 0.1.0 源码包也可直接用这条命令重新安装，无需删除 `.venv`：
+
+```sh
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple .
+```
+
+若出现 `No matching distribution found for setuptools>=77` 且日志显示清华等镜像，先按上述命令重试。`setuptools>=77` 用于构建元数据中的 `license-files`，应保留；仅提前安装 setuptools 不能阻止默认隔离构建再次访问旧镜像。若官方源也不可访问，使用组织提供的可用包源替换 `--index-url`，或按[离线安装](release.md#离线安装)准备 wheel 和依赖包。
 
 ### 使用 wheel 分发包
 
@@ -51,7 +59,7 @@ python3 -m venv .venv
 mkdir -p "$HOME/Kea2Data"
 cd "$HOME/Kea2Data"
 python3 -m venv .venv
-./.venv/bin/python -m pip install ./kea2_workbench-0.1.0-py3-none-any.whl
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.1-py3-none-any.whl
 ./.venv/bin/python -m kea2.cli init
 ```
 
@@ -147,6 +155,7 @@ adb devices -l
 | 现象 | macOS 检查方式 |
 |---|---|
 | Python 版本不满足或依赖安装失败 | 确认解释器版本/架构，使用对应架构 Python 重新创建 `.venv`，检查包源网络 |
+| 隔离构建找不到 `setuptools>=77` | 使用 `pip install --index-url https://pypi.org/simple .`；检查日志中的包源地址，参见上文安装说明 |
 | `adb: command not found` | 用 `command -v adb` 检查 PATH，在能找到 ADB 的新 Terminal 会话重新启动服务 |
 | 手机不可选 | 检查授权、数据线、扩展坞，确认 `adb devices -l` 为 `device` |
 | Kea2 未初始化 | `--root` 中须有 `configs/`，新 wheel 工作目录先运行 `python -m kea2.cli init` |

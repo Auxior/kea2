@@ -1,6 +1,6 @@
 # Kea2 Android 测试工作台
 
-基于官方 [Kea2](https://github.com/ecnusse/Kea2) 1.2.4 的独立本机 Web 工具，当前工具版本 **0.1.0**。支持 Android 设备选择、随机探索参数配置、启动与停止、实时日志、本地 HTML 报告，以及向测试平台持续同步结果。Windows 和 macOS 均使用 Python 安装，在浏览器中操作；无需安装其他工作台或部署测试平台即可完成本地测试。
+基于官方 [Kea2](https://github.com/ecnusse/Kea2) 1.2.4 的独立本机 Web 工具，当前工具版本 **0.1.1**。支持 Android 设备选择、随机探索参数配置、启动与停止、实时日志、本地 HTML 报告，以及向测试平台持续同步结果。Windows 和 macOS 均使用 Python 安装，在浏览器中操作；无需安装其他工作台或部署测试平台即可完成本地测试。
 
 独立分发形式为 Python 源码包（`.tar.gz`）和通用 wheel（`.whl`），需要另行安装 Python、ADB 和工具依赖。请按所用系统的完整指南操作：
 
@@ -20,7 +20,7 @@ Windows / PowerShell：
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .
 .\.venv\Scripts\python.exe -m kea_workbench --root .
 ```
 
@@ -28,11 +28,13 @@ macOS / Terminal：
 
 ```sh
 python3 -m venv .venv
-./.venv/bin/python -m pip install .
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple .
 ./.venv/bin/python -m kea_workbench --root .
 ```
 
-安装时需要联网访问 Python 包源。打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)。首次试运行建议关闭“同步到测试平台”，设置 1 分钟，连接已授权 USB 调试的设备，并确认被测 App 已安装。默认时长为 600 分钟，即 10 小时。
+安装命令显式使用官方 PyPI，覆盖本机默认镜像；源码隔离构建也使用该源下载 `setuptools>=77`。安装时需要联网访问该包源，受限网络可替换为组织提供的可用源，或按发布说明准备离线依赖。已有 0.1.0 源码包遇到镜像下载错误时，也可使用上述指定源的安装命令重试，无需重建虚拟环境。
+
+打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)。首次试运行建议关闭“同步到测试平台”，设置 1 分钟，连接已授权 USB 调试的设备，并确认被测 App 已安装。默认时长为 600 分钟，即 10 小时。
 
 `kea2-web` 与 `python -m kea_workbench` 是同一启动入口；可以通过 `--host`、`--port`、`--root` 设置监听地址、端口和工作目录。工作目录必须有官方 `configs/`；只安装 wheel 时请先按系统指南执行 `kea2 init`。设置和历史记录保存在工作目录内，重启时使用同一 `--root`。
 

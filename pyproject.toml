@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kea2-workbench"
-version = "0.1.0"
+version = "0.1.1"
 description = "Kea2 Android 测试工作台与平台报告同步"
 readme = "README.md"
 license-files = ["THIRD_PARTY_LICENSE.txt"]
