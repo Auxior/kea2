@@ -228,10 +228,11 @@ def main():
         return 0
     lock = acquire_lock(root)
     try:
-        with socket.socket() as listener:
-            try:
-                listener.bind(("127.0.0.1", port))
-            except OSError:
+        with socket.socket() as connection:
+            connection.settimeout(1)
+            # Binding would misclassify recently closed TIME_WAIT connections
+            # as a busy service. Only reject an actual listening server.
+            if connection.connect_ex(("127.0.0.1", port)) == 0:
                 raise RuntimeError(f"端口 {port} 已被其他服务占用，请设置 KEA2_PORT 后重试。") from None
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         python = prepare_python(root, env)

@@ -163,6 +163,12 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
     try:
         assert launcher.main() == 0
         assert len(opened) == 2
+        # Restart immediately after HTTP connections close; TIME_WAIT sockets
+        # must not be mistaken for a listening application.
+        monkeypatch.setattr(launcher, "open_page", browser)
+        assert launcher.main() == 0
+        assert len(processes) == 2
+        assert len(opened) == 4
     finally:
         for process in processes:
             if process.poll() is None:
