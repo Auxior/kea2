@@ -1,0 +1,16 @@
+{
+  "platform": {
+    "endpoint": "http://aitest_engine_dev.ugreencloud.com:8000/api/tasks/external-reports",
+    "frontend": "http://aitest_engine_dev.ugreencloud.com:5173",
+    "serviceId": "svc-9d600523b619446099f0a773257ad4af",
+    "capabilityId": "cap-2b8d018a21de422096c5c791005bf50b"
+  },
+  "minio": {
+    "endpoint": "http://aiot-testing.ugreeniot.com:19000",
+    "bucket": "autotest-reports",
+    "prefix": "kea2",
+    "accessKey": "",
+    "secretKey": "",
+    "publicBaseUrl": ""
+  }
+}

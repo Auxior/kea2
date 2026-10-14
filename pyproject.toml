@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kea2-workbench"
+version = "0.1.0"
+description = "Kea2 Android 测试工作台与平台报告同步"
+requires-python = ">=3.11"
+dependencies = ["kea2-python==1.2.4", "fastapi==0.143.0", "uvicorn==0.54.0", "minio==7.2.20", "httpx==0.28.1"]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[project.scripts]
+kea2-web = "kea_workbench.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kea_workbench*"]
+
+[tool.setuptools.package-data]
+kea_workbench = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

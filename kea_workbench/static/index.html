@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Kea2 · Android 测试工作台</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/client.js" type="module"></script>
+  </head>
+  <body>
+    <a class="skip" href="#workspace">跳到测试工作台</a>
+    <header>
+      <div class="header-inner">
+        <a class="brand" href="/"
+          ><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+            <rect width="40" height="40" rx="12" fill="#202b3c" />
+            <path
+              d="M12 10v20m16-20L13 21l16 9"
+              fill="none"
+              stroke="white"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+            <circle cx="29" cy="12" r="4" fill="#80d5b3" />
+          </svg>
+          <div>
+            <h1>Android 测试工作台</h1>
+            <small>KEA2 · 随机探索与质量追踪</small>
+          </div></a
+        >
+        <div class="header-actions">
+          <span id="connection" role="status" class="connection"
+            >正在连接本机</span
+          ><button id="settings-open" class="secondary" aria-haspopup="dialog">
+            设置
+          </button>
+        </div>
+      </div>
+    </header>
+    <main id="workspace">
+      <p id="message" class="notice" role="status" hidden></p>
+      <div class="workspace-grid">
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <span class="eyebrow">PREPARE</span>
+              <h2>新建测试</h2>
+            </div>
+            <span class="badge">Kea2 1.2.4</span>
+          </div>
+          <form id="run-form">
+            <div class="field">
+              <div class="label-row">
+                <label for="serial">测试设备</label
+                ><button type="button" id="refresh-devices" class="text-button">
+                  刷新设备
+                </button>
+              </div>
+              <select id="serial" name="serial" required>
+                <option value="">正在检测设备…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="package">App 包名</label
+              ><input
+                id="package"
+                name="package"
+                value="com.ugreen.iot"
+                required
+                autocomplete="off"
+                placeholder="如 com.ugreen.iot"
+              />
+              <p id="project" class="field-help">项目根据 App 包名自动关联</p>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="runningMinutes">测试时长（分钟）</label
+                ><input
+                  id="runningMinutes"
+                  name="runningMinutes"
+                  type="number"
+                  value="600"
+                  min="1"
+                  max="10080"
+                  required
+                />
+                <p id="duration-help" class="field-help">600 分钟 = 10 小时</p>
+              </div>
+              <div class="field">
+                <label for="maxStep">最大步数</label
+                ><input
+                  id="maxStep"
+                  name="maxStep"
+                  type="number"
+                  value="99999"
+                  min="1"
+                  max="2147483647"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="throttle">操作间隔（毫秒）</label
+                ><input
+                  id="throttle"
+                  name="throttle"
+                  type="number"
+                  value="300"
+                  min="0"
+                  max="60000"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="profilePeriod">数据采集周期（步）</label
+                ><input
+                  id="profilePeriod"
+                  name="profilePeriod"
+                  type="number"
+                  value="25"
+                  min="1"
+                  max="10000"
+                  required
+                />
+              </div>
+            </div>
+            <div class="divider"></div>
+            <label class="switch-row" for="takeScreenshots"
+              ><div>
+                <strong>采集执行截图</strong
+                ><span class="field-help">保留失败前后的操作画面</span>
+              </div>
+              <input
+                id="takeScreenshots"
+                name="takeScreenshots"
+                type="checkbox"
+                role="switch"
+                checked
+            /></label>
+            <div class="form-grid">
+              <div class="field">
+                <label for="preFailureScreenshots">失败前截图（张）</label
+                ><input
+                  id="preFailureScreenshots"
+                  name="preFailureScreenshots"
+                  type="number"
+                  value="20"
+                  min="0"
+                  max="1000"
+                  required
+                />
+                <p class="field-help">0 表示每一步都截图</p>
+              </div>
+              <div class="field">
+                <label for="postFailureScreenshots">失败后截图（张）</label
+                ><input
+                  id="postFailureScreenshots"
+                  name="postFailureScreenshots"
+                  type="number"
+                  value="5"
+                  min="0"
+                  max="1000"
+                  required
+                />
+                <p class="field-help">不能超过失败前截图数量</p>
+              </div>
+            </div>
+            <label class="switch-row" for="platformEnabled"
+              ><div>
+                <strong>同步测试平台</strong
+                ><span class="field-help"
+                  >配置 ≥5 分钟且实际成功运行满 5 分钟后上报</span
+                >
+              </div>
+              <input
+                id="platformEnabled"
+                name="platformEnabled"
+                type="checkbox"
+                role="switch"
+                checked
+            /></label>
+            <button class="primary full" id="start" disabled>
+              开始测试 <span aria-hidden="true">↗</span>
+            </button>
+            <p class="field-help centered">
+              运行期间修改表单，不影响已经启动的测试。
+            </p>
+            <details class="command-preview">
+              <summary>本次命令预览</summary>
+              <pre id="command"></pre>
+            </details>
+          </form>
+        </section>
+        <section class="panel progress-panel">
+          <div class="panel-title">
+            <div>
+              <span class="eyebrow">OBSERVE</span>
+              <h2>运行概况</h2>
+            </div>
+            <span id="status" class="badge">尚未运行</span>
+          </div>
+          <div id="empty" class="empty-state">
+            <svg
+              width="54"
+              height="54"
+              viewBox="0 0 54 54"
+              fill="none"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="48" height="48" rx="15" />
+              <path
+                d="m23 17 14 10-14 10Z"
+                stroke-linejoin="round"
+                stroke-width="2"
+              />
+            </svg>
+            <h3>准备好，就开始。</h3>
+            <p>
+              连接 Android 设备，填写测试参数。<br />运行状态、日志和报告会显示在这里。
+            </p>
+          </div>
+          <div id="detail" hidden>
+            <div class="run-heading">
+              <strong id="run-package"></strong
+              ><span id="run-device" class="field-help"></span>
+            </div>
+            <div class="progress-label">
+              <span>成功探索时长</span><strong id="elapsed">0 秒</strong>
+            </div>
+            <progress
+              id="progress"
+              value="0"
+              max="1"
+              aria-label="测试时长进度"
+            ></progress>
+            <div class="metrics">
+              <div><span>已发送步数</span><strong id="steps">0</strong></div>
+              <div>
+                <span>Crash / ANR</span><strong id="findings">0</strong>
+              </div>
+              <div>
+                <span>平台上报</span><strong id="delivery">待达标</strong>
+              </div>
+            </div>
+            <p id="run-error" class="error-copy" hidden></p>
+            <p id="delivery-error" class="error-copy" hidden></p>
+            <div class="label-row">
+              <h3>最近执行日志</h3>
+              <label class="follow"
+                ><input id="follow" type="checkbox" checked />跟随更新</label
+              >
+            </div>
+            <pre
+              id="logs"
+              class="logs"
+              tabindex="0"
+              aria-label="最近执行日志"
+            ></pre>
+            <div class="run-actions">
+              <button id="stop" class="secondary">停止测试</button
+              ><a
+                id="report"
+                class="primary"
+                href="#"
+                target="_blank"
+                rel="noopener"
+                hidden
+                >查看测试报告 ↗</a
+              ><a
+                id="full-log"
+                class="text-button"
+                target="_blank"
+                rel="noopener"
+                >完整日志</a
+              ><a
+                id="platform-link"
+                class="text-button"
+                target="_blank"
+                rel="noopener"
+                hidden
+                >平台记录 ↗</a
+              ><button id="retry" class="text-button" hidden>重试上报</button>
+            </div>
+            <details>
+              <summary>本次配置快照</summary>
+              <pre id="snapshot"></pre>
+            </details>
+            <p id="run-id" class="field-help mono"></p>
+          </div>
+          <div class="panel-foot">
+            刷新或关闭页面后，测试仍由本机服务继续执行。
+          </div>
+        </section>
+      </div>
+      <section class="panel history">
+        <div class="panel-title">
+          <div>
+            <h2>运行记录</h2>
+            <p class="field-help">回看本机保存的执行过程与报告</p>
+          </div>
+          <span id="history-count" class="badge">0 次运行</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">
+              本机测试运行记录
+            </caption>
+            <thead>
+              <tr>
+                <th>App / 设备</th>
+                <th>开始时间</th>
+                <th>配置时长 / 步数</th>
+                <th>运行状态</th>
+                <th>平台上报</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="history"></tbody>
+          </table>
+        </div>
+        <p id="history-empty" class="history-empty">
+          还没有运行记录。开始一次测试，结果会保存在这里。
+        </p>
+      </section>
+      <footer>Kea2 Workbench · 基于官方 Kea2 引擎</footer>
+    </main>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <form id="settings-form">
+        <div class="panel-title">
+          <h2 id="settings-title">连接设置</h2>
+          <button
+            type="button"
+            id="settings-close"
+            class="text-button"
+            aria-label="关闭设置"
+          >
+            关闭
+          </button>
+        </div>
+        <p class="field-help">保存到本机，对之后新建的任务生效。</p>
+        <h3>测试平台</h3>
+        <div class="field">
+          <label for="platform-endpoint">结果上报接口</label
+          ><input id="platform-endpoint" required type="url" />
+        </div>
+        <div class="field">
+          <label for="platform-frontend">平台页面地址</label
+          ><input id="platform-frontend" required type="url" />
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="platform-serviceId">服务 ID</label
+            ><input id="platform-serviceId" required />
+          </div>
+          <div class="field">
+            <label for="platform-capabilityId">能力 ID</label
+            ><input id="platform-capabilityId" required />
+          </div>
+        </div>
+        <div class="divider"></div>
+        <h3>报告存储 · MinIO</h3>
+        <div class="field">
+          <label for="minio-endpoint">存储服务地址</label
+          ><input id="minio-endpoint" type="url" required />
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="minio-bucket">存储桶</label
+            ><input id="minio-bucket" required />
+          </div>
+          <div class="field">
+            <label for="minio-prefix">报告目录前缀</label
+            ><input id="minio-prefix" required />
+          </div>
+          <div class="field">
+            <label for="minio-accessKey">Access Key</label
+            ><input id="minio-accessKey" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="minio-secretKey">Secret Key</label
+            ><input id="minio-secretKey" type="password" autocomplete="off" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="minio-publicBaseUrl">公开访问根地址（选填）</label
+          ><input
+            id="minio-publicBaseUrl"
+            type="url"
+            placeholder="留空使用存储服务地址 / 存储桶"
+          />
+        </div>
+        <p id="settings-error" class="error-copy" hidden></p>
+        <button class="primary full">保存设置</button>
+      </form>
+    </dialog>
+  </body>
+</html>
