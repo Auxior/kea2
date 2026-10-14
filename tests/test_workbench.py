@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -16,7 +17,7 @@ from kea_workbench.engine import Manager, Runtime, command
 from kea_workbench.models import PROJECTS, RunConfig
 from kea_workbench.reports import render_report
 from kea_workbench.server import create_app
-from kea_workbench.storage import write_json
+from kea_workbench.storage import load_settings, write_json
 
 
 @pytest.fixture
@@ -87,6 +88,42 @@ def test_invalid_inputs_are_rejected(fields):
 
 def test_unknown_app_can_run_without_platform():
     assert RunConfig(serial="device", package="com.unknown.app", platformEnabled=False)
+
+
+def test_standalone_settings_fallback_and_local_utf8_override(tmp_path, settings):
+    assert load_settings(tmp_path) == settings
+    bundled = Path(engine.__file__).parent / "settings.example.json"
+    assert json.loads(bundled.read_text(encoding="utf-8")) == settings
+    settings["minio"]["prefix"] = "中文报告"
+    write_json(tmp_path / "data/settings.json", settings)
+    assert load_settings(tmp_path)["minio"]["prefix"] == "中文报告"
+    assert "中文报告" in (tmp_path / "data/settings.json").read_text(encoding="utf-8")
+
+
+def test_windows_stop_uses_process_group_break_and_cleanup_handler(monkeypatch):
+    from kea_workbench import runner
+
+    signals = []
+    monkeypatch.setattr(engine, "sys", SimpleNamespace(platform="win32", executable=sys.executable))
+    monkeypatch.setattr(engine.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+    monkeypatch.setattr(engine.signal, "CTRL_BREAK_EVENT", 1, raising=False)
+    assert engine.process_options() == {"creationflags": 512}
+    assert command(RunConfig(serial="device"), Path("run"), "id")[3] == "kea_workbench.runner"
+    engine.interrupt_process(SimpleNamespace(send_signal=signals.append))
+    assert signals == [1]
+
+    import kea2.cli
+
+    handlers = []
+    monkeypatch.setattr(runner, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(runner.signal, "SIGBREAK", 21, raising=False)
+    monkeypatch.setattr(runner.signal, "signal", lambda sig, handler: handlers.append((sig, handler)))
+    monkeypatch.setattr(kea2.cli, "main", lambda: signals.append("kea2"))
+    runner.main()
+    assert signals[-1] == "kea2"
+    assert handlers == [(21, runner.signal.default_int_handler)]
+    with pytest.raises(KeyboardInterrupt):
+        handlers[0][1](21, None)
 
 
 def test_gate_excludes_preparation_and_latches_before_later_failure(tmp_path, record, settings):
@@ -230,7 +267,7 @@ def test_background_upload_never_blocks_logs_and_cancellation_updates_same_task(
         "adb",
         lambda serial, *args: "package:unit" if args[1:3] == ("pm", "path") else "",
     )
-    script = "import time\nprint('[New Iteration] Elapsed: 300.0s', flush=True)\ntry:\n while True:\n  print('Sending monkeyEvent (125 / 99999)', flush=True)\n  time.sleep(.02)\nexcept KeyboardInterrupt:\n print('Finish sending monkey events.',flush=True)\n"
+    script = "import time, signal, sys\nif sys.platform == 'win32':\n signal.signal(signal.SIGBREAK, signal.default_int_handler)\nprint('[New Iteration] Elapsed: 300.0s', flush=True)\ntry:\n while True:\n  print('Sending monkeyEvent (125 / 99999)', flush=True)\n  time.sleep(.02)\nexcept KeyboardInterrupt:\n print('Finish sending monkey events.',flush=True)\n"
     monkeypatch.setattr(engine, "command", lambda *args: [sys.executable, "-u", "-c", script])
     entered, release = threading.Event(), threading.Event()
     requests = []

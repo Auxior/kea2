@@ -16,7 +16,7 @@ def generate_native(directory: Path):
     raw = raw_directory(directory)
     if raw is None:
         return False
-    with (directory / "report-generation.log").open("a") as log:
+    with (directory / "report-generation.log").open("a", encoding="utf-8") as log:
         result = subprocess.run(
             [sys.executable, "-m", "kea2.cli", "report", "-p", str(raw)],
             stdout=log,
@@ -78,7 +78,7 @@ def render_report(directory: Path, run: dict):
 <style>body{{margin:0;background:#f7f8fa;color:#202a39;font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}}main{{max-width:1200px;margin:auto;padding:32px}}section{{background:white;border:1px solid #e7e9ee;border-radius:14px;padding:24px;margin:20px 0}}h1{{font-size:28px}}h2{{font-size:18px}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}}.metrics div{{padding:16px;background:#f2f4f7;border-radius:10px}}span{{display:block;color:#536174}}strong{{font-size:22px}}dl{{display:grid;grid-template-columns:160px 1fr;gap:10px}}dd{{margin:0;overflow-wrap:anywhere}}iframe{{width:100%;height:1100px;border:0;margin-top:20px}}a{{color:#167957}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f4f7;padding:20px}}@media(max-width:650px){{main{{padding:16px}}.metrics{{grid-template-columns:repeat(2,1fr)}}dl{{grid-template-columns:100px 1fr}}}}</style>
 <main><small>KEA2 / ANDROID TESTING</small><h1>Android 随机探索报告</h1><p role="status">{escape(banner)} · 更新于 {escape(run["updatedAt"])}</p><div class="metrics">{metrics}</div><section><h2>本次执行</h2><dl>{details}</dl><p>{escape(run.get("error") or "")}</p></section>{native_view}<section><h2>最近日志</h2><pre>{escape(chr(10).join(run.get("recentLogs", [])[-80:]))}</pre><a href="console.log">完整执行日志</a> · <a href="run.json">执行数据 JSON</a></section></main></html>"""
     temporary = directory / "index.html.tmp"
-    temporary.write_text(content)
+    temporary.write_text(content, encoding="utf-8")
     temporary.replace(directory / "index.html")
 
 

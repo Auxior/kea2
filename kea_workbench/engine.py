@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import re
 import signal
 import subprocess
@@ -15,12 +16,26 @@ from .reports import generate_native, make_snapshot, raw_directory, render_repor
 from .storage import now, write_json
 
 
+def process_options():
+    if sys.platform == "win32":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def interrupt_process(process):
+    process.send_signal(signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGINT)
+
+
 def adb(serial, *args):
-    return subprocess.check_output(["adb", "-s", serial, *args], text=True, timeout=15).strip()
+    return subprocess.check_output(
+        ["adb", "-s", serial, *args], encoding="utf-8", errors="replace", timeout=15
+    ).strip()
 
 
 def devices():
-    output = subprocess.check_output(["adb", "devices", "-l"], text=True, timeout=10)
+    output = subprocess.check_output(
+        ["adb", "devices", "-l"], encoding="utf-8", errors="replace", timeout=10
+    )
     found = []
     for line in output.splitlines()[1:]:
         fields = line.split()
@@ -42,7 +57,7 @@ def command(config: RunConfig, directory: Path, run_id):
         sys.executable,
         "-u",
         "-m",
-        "kea2.cli",
+        "kea_workbench.runner" if sys.platform == "win32" else "kea2.cli",
         "run",
         "-s",
         config.serial,
@@ -118,7 +133,7 @@ class Runtime:
         path = raw / f"fastbot_{self.record['id']}.log" if raw else None
         if path is None or not path.exists():
             return
-        with path.open(errors="replace") as stream:
+        with path.open(encoding="utf-8", errors="replace") as stream:
             stream.seek(self.device_log_offset)
             lines = stream.readlines()
             self.device_log_offset = stream.tell()
@@ -145,7 +160,7 @@ class Manager:
         self.runs = {}
         self.lock = threading.RLock()
         for path in sorted((root / "artifacts").glob("*/run.json")):
-            run = json.loads(path.read_text())
+            run = json.loads(path.read_text(encoding="utf-8"))
             if run["status"] in ACTIVE:
                 run.update(
                     status="interrupted",
@@ -239,7 +254,7 @@ class Manager:
 
     def execute(self, runtime, config):
         def read_output(process):
-            with (runtime.directory / "console.log").open("a", buffering=1) as log:
+            with (runtime.directory / "console.log").open("a", buffering=1, encoding="utf-8") as log:
                 for line in process.stdout:
                     log.write(line)
                     runtime.log(line)
@@ -251,8 +266,11 @@ class Manager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
-                start_new_session=True,
+                env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+                **process_options(),
             )
             runtime.process = process
             with runtime.lock:
@@ -266,7 +284,7 @@ class Manager:
                 runtime.read_findings()
                 runtime.qualify()
                 if runtime.stop.is_set() and interrupted_at is None:
-                    process.send_signal(signal.SIGINT)
+                    interrupt_process(process)
                     interrupted_at = time.monotonic()
                 if interrupted_at and time.monotonic() - interrupted_at > 90:
                     process.kill()

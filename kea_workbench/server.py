@@ -11,7 +11,7 @@ from .storage import load_settings, write_json
 
 
 def create_app(root=None):
-    root = Path(root or Path(__file__).resolve().parents[1])
+    root = Path(root or Path(__file__).resolve().parents[1]).resolve()
     manager = Manager(root, load_settings(root))
 
     @asynccontextmanager

@@ -19,7 +19,7 @@ kea2-web = "kea_workbench.__main__:main"
 include = ["kea_workbench*"]
 
 [tool.setuptools.package-data]
-kea_workbench = ["static/*"]
+kea_workbench = ["static/*", "settings.example.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
