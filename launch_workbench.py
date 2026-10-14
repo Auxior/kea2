@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -125,7 +126,7 @@ import fastapi, uvicorn, minio, httpx, kea2
     return python
 
 
-def download_adb(root):
+def download_adb(root, ca_bundle=None):
     platform = {"darwin": "darwin", "win32": "windows"}.get(sys.platform)
     if not platform:
         raise RuntimeError("自动下载 ADB 仅支持 Windows 和 macOS，请手动安装 Platform-Tools。")
@@ -133,10 +134,15 @@ def download_adb(root):
     tools.mkdir(exist_ok=True)
     url = f"https://dl.google.com/android/repository/platform-tools-latest-{platform}.zip"
     say("未找到 ADB，正在下载官方 Platform-Tools 到本工具的 tools/ 目录……")
+    context = ssl.create_default_context()
+    if ca_bundle:
+        # python.org macOS installations may lack the optional system CA setup.
+        # Add the certificate bundle already installed with the app dependencies.
+        context.load_verify_locations(cafile=ca_bundle)
     with tempfile.TemporaryDirectory(prefix=".adb-", dir=tools) as temporary:
         temporary = Path(temporary)
         archive = temporary / "platform-tools.zip"
-        with urlopen(url, timeout=30) as response, archive.open("wb") as output:
+        with urlopen(url, timeout=30, context=context) as response, archive.open("wb") as output:
             shutil.copyfileobj(response, output)
         with zipfile.ZipFile(archive) as package:
             for member in package.infolist():
@@ -156,7 +162,7 @@ def download_adb(root):
     return destination
 
 
-def prepare_adb(root, env):
+def prepare_adb(root, env, python):
     executable = "adb.exe" if sys.platform == "win32" else "adb"
     candidates = [root / "tools/platform-tools"]
     found = shutil.which("adb", path=env.get("PATH"))
@@ -172,7 +178,11 @@ def prepare_adb(root, env):
     ])
     directory = next((path for path in candidates if (path / executable).is_file()), None)
     if directory is None:
-        directory = download_adb(root)
+        certificates = subprocess.check_output(
+            [str(python), "-c", "import certifi; print(certifi.where())"],
+            env=env, encoding="utf-8", timeout=15,
+        ).strip()
+        directory = download_adb(root, certificates)
     env["PATH"] = str(directory) + os.pathsep + env.get("PATH", "")
     run_checked([str(directory / executable), "version"], env=env)
     say("ADB 检查通过；手机可以在工作台打开后连接。")
@@ -225,7 +235,7 @@ def main():
                 raise RuntimeError(f"端口 {port} 已被其他服务占用，请设置 KEA2_PORT 后重试。") from None
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         python = prepare_python(root, env)
-        prepare_adb(root, env)
+        prepare_adb(root, env, python)
         if not (root / "configs").is_dir():
             say("正在初始化官方 Kea2 配置……")
             run_checked([str(python), "-m", "kea2.cli", "init"], cwd=root, env=env)

@@ -86,6 +86,31 @@ def test_launch_lock_prevents_duplicate_preparation_and_releases_on_close(tmp_pa
     launcher.acquire_lock(tmp_path).close()
 
 
+def test_missing_adb_uses_virtual_environment_certificates_and_local_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr(launcher.shutil, "which", lambda *a, **k: None)
+    python = tmp_path / ".venv/python"
+    queries = []
+    monkeypatch.setattr(
+        launcher.subprocess, "check_output",
+        lambda command, **kwargs: queries.append(command) or "/venv/certifi/cacert.pem\n",
+    )
+    directory = tmp_path / "tools/platform-tools"
+    downloads = []
+    monkeypatch.setattr(
+        launcher, "download_adb",
+        lambda root, certificates: downloads.append((root, certificates)) or directory,
+    )
+    commands = []
+    monkeypatch.setattr(launcher, "run_checked", lambda command, **kwargs: commands.append(command))
+    env = {"PATH": "original"}
+    launcher.prepare_adb(tmp_path, env, python)
+    assert queries[0][0] == str(python)
+    assert downloads == [(tmp_path, "/venv/certifi/cacert.pem")]
+    assert env["PATH"].startswith(str(directory))
+    assert commands[0][-1] == "version"
+
+
 def test_wrong_service_port_is_rejected_before_installation(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").touch()
     monkeypatch.setattr(launcher, "ROOT", tmp_path)
