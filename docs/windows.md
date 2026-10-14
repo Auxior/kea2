@@ -1,0 +1,145 @@
+# Windows 使用指南
+
+适用版本：Kea2 Android 测试工作台 0.1.0 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+
+## 1. 环境要求
+
+| 项目 | 要求与检查 |
+|---|---|
+| 系统 | 推荐 Windows 10 / 11 64 位；需有可写工作目录和正常的控制台会话 |
+| Python | 3.11 或更高版本，推荐使用 64 位 Python；`py -3 --version` 必须满足要求 |
+| ADB | 安装官方 [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools)，将包含 `adb.exe` 的目录加入 PATH；`adb version` 能执行 |
+| 设备驱动 | 根据手机厂商安装 Windows USB/ADB 驱动，设备管理器能识别 Android 调试设备 |
+| Android 设备 | 已开启开发者选项、USB 调试并授权本机；被测 App 已安装，已完成测试需要的登录与权限授予 |
+| 浏览器 | 当前版本的 Edge、Chrome 或 Firefox |
+| 网络和空间 | 安装需要访问 Python 包源；上报需要访问测试平台与 MinIO；电脑与手机为日志和截图预留可用空间 |
+
+本工具不需要 Android Studio 完整环境；Platform-Tools 提供 ADB 即可。工具不会替你安装被测 APK。默认仅在本机浏览器访问。
+
+如果 `py` 不存在，可用已安装的 `python` 替代，但先执行 `python --version` 确认版本。多个 Python 共存时，请指定符合要求的版本（例如 `py -3.11`）。
+
+## 2. 安装和配置
+
+### 使用源码分发包
+
+解压维护者提供的 `kea2_workbench-0.1.0.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+
+```powershell
+Set-Location 'C:\Tools\kea2-workbench'
+py -3 --version
+adb version
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\python.exe -m kea_workbench --help
+.\.venv\Scripts\python.exe -m kea2.cli version
+```
+
+最后一条应输出 Kea2 `1.2.4`。使用完整的虚拟环境解释器路径，不需要激活环境或修改 PowerShell 执行策略。源码包已提供 `configs/`，无需再次初始化。
+
+### 使用 wheel 分发包
+
+wheel 只包含应用和默认连接配置，不含工作目录的官方配置。将 wheel 放到新建的工作目录中（下面使用 `C:\Tools\Kea2Data`），执行：
+
+```powershell
+New-Item -ItemType Directory -Force 'C:\Tools\Kea2Data'
+Set-Location 'C:\Tools\Kea2Data'
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .\kea2_workbench-0.1.0-py3-none-any.whl
+.\.venv\Scripts\python.exe -m kea2.cli init
+```
+
+`init` 在当前目录生成 `configs/` 和 `quicktest.py`。将此目录作为后续 `--root`，使测试进程能找到上游配置。安装应用不等于初始化工作目录。
+
+首次仅本地测试可直接关闭“同步到测试平台”。开启上报前，在网页右上角“设置”中填写平台及 MinIO 配置。保存结果位于 `<工作目录>\data\settings.json`，任务保存创建时的连接快照。字段说明见[连接设置](usage.md#连接设置)。
+
+## 3. 启动与退出
+
+每次打开 PowerShell，进入安装时的工作目录：
+
+```powershell
+Set-Location 'C:\Tools\kea2-workbench'
+.\.venv\Scripts\python.exe -m kea_workbench --host 127.0.0.1 --port 4320 --root .
+```
+
+wheel 用户将上述目录替换为 `C:\Tools\Kea2Data`。打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)，启动命令不会自动打开浏览器。也可使用同一虚拟环境的入口：
+
+```powershell
+.\.venv\Scripts\kea2-web.exe --root .
+```
+
+从其他目录启动时，用完整路径指定解释器和工作目录，例如：
+
+```powershell
+& 'C:\Tools\kea2-workbench\.venv\Scripts\python.exe' -m kea_workbench --root 'C:\Tools\kea2-workbench' --port 4321
+```
+
+此时网页地址为 [http://127.0.0.1:4321/](http://127.0.0.1:4321/)。端口冲突时更换端口；不要重复启动占用同一工作目录的服务。
+
+保持启动终端打开、电脑和 USB 连接可用。结束使用时先在网页停止测试，等运行变为终态并完成最终上报，再在 PowerShell 按一次 Ctrl+C。不要直接关闭终端或结束进程。Windows 停止通过专用子进程组的 Ctrl+Break 转换为 Kea2 的中断清理流程；超出 90 秒会强制结束并记录清理未确认。
+
+## 4. 连接设备
+
+1. 用支持数据传输的 USB 线连接手机；手机开启“开发者选项 → USB 调试”。
+2. 解锁手机，接受“允许 USB 调试”弹窗并确认本机 RSA 指纹。
+3. 在 PowerShell 检查：
+
+```powershell
+adb devices -l
+adb -s DEVICE_SERIAL shell pm path com.ugreen.iot
+```
+
+将 `DEVICE_SERIAL` 替换为上一条输出的序列号，包名替换为被测 App。第一条中设备状态应为 `device`，第二条应输出以 `package:` 开头的 APK 路径。`unauthorized` 需要手机授权；`offline` 需要检查连接；空列表优先检查 USB 线和 Windows 驱动。
+
+4. 在网页“新建测试 → 测试设备”点击“刷新设备”，选择设备。只有一台可用设备时自动选中，多台时手动选择；非 `device` 状态不可选。
+
+如果当前没有其他 ADB 测试，可尝试重新启动 ADB 服务：
+
+```powershell
+adb kill-server
+adb start-server
+adb devices -l
+```
+
+修改 PATH 后重新打开 PowerShell并重新启动工作台，运行中的服务不会自动继承新的 PATH。
+
+## 5. 测试操作
+
+1. 填写手机上实际安装的 App 包名。平台项目自动按包名关联，不提供手动项目 ID。
+2. 首次验证关闭“同步到测试平台”，设置时长 **1 分钟**，其余参数可使用默认值。正常默认值为 600 分钟、99999 步、300 毫秒间隔、25 步采集一次、开启截图（失败前 20 / 后 5）。
+3. 点击“开始测试”，确认状态从“准备中”进入“运行中”，观察成功探索时长、已发送步数、Crash / ANR 和最近日志。最近日志保留 160 行，可用“完整日志”查看全部输出。
+4. 时间或最大步数任一到达限制就结束。需提前结束时点击“停止测试”，等待设备同步和报告生成。“已完成”只表示执行完成，质量结论需结合 Crash / ANR 和原生报告。
+5. 点击历史记录的“查看过程”可切换运行；点击“报告”查看已有结果。刷新或关闭网页不会停止任务。
+
+截图设为失败前 0 时，需要同时将失败后设为 0；表示每步截图，可能明显增加手机与电脑存储占用。完整范围和状态见[测试参数](usage.md#测试参数)。
+
+## 6. 报告查看
+
+网页选中运行后点击“查看测试报告”，或在“运行记录”点击“报告”。通常结束后可查看；已满足平台上报门槛的活动任务也显示报告入口，实际内容取决于报告生成和同步进度。
+
+报告位于 `<工作目录>\artifacts\<运行编号>\index.html`，保留配置、状态、进度及最近日志，嵌入 `raw\res_<运行编号>\bug_report.html` 原生报告。`console.log` 为完整日志，`run.json` 为参数和真实命令。原生报告尚未生成时，工作台会显示提示并保留已有数据。
+
+优先通过工作台的 HTTP 页面查看报告。需转移到其他电脑时，复制整个运行目录，保持 `raw` 内图片与文件的相对路径；仅复制 `index.html` 无法完整展示报告。报告的事件数和时长可能与工作台发送日志统计不同，详见[报告与数据](usage.md#报告与数据)。
+
+## 7. 平台上报流程
+
+1. 连接可访问内部测试平台与 MinIO 的网络，在网页“设置”中填写结果上报接口、平台页面地址、服务 ID、能力 ID、MinIO 地址、桶、前缀和访问凭据。桶须已创建，报告地址需能被查看报告的浏览器访问。
+2. 选择已关联项目的 App，开启“同步到测试平台”，设置时长至少 5 分钟，并确保最大步数不会在实际探索满 300 秒前耗尽。门槛不包含准备与收尾时间；达标前发现 Crash / ANR 的运行不会取得上报资格。
+3. 达标后后台持续生成并上传报告快照，提交平台结果。等待约 15 秒是同步循环间隔，生成和上传耗时可能使实际间隔更长；观察“同步中 / 已上报 / 上报失败”。
+4. 出现“平台记录”时可跳到平台任务中心。在线 HTML 报告地址是 `run.json` 中 `delivery.reportUrl`；平台列表和报告入口以部署的实际界面为准。
+5. 结束后检查最终上报状态。上报失败可在任务结束且当前上报线程已退出后点击“重试上报”，重试使用该任务保存的连接配置，不连接设备。修改设置只影响新任务，不能用界面改写旧任务的连接快照。
+
+未达门槛的任务保留本地报告，不能补报。完整门槛、状态映射和回执排查见[平台上报](usage.md#平台上报)。
+
+## 8. 常见问题
+
+| 现象 | Windows 检查方式 |
+|---|---|
+| 找不到 `py` / Python 版本过低 | 安装符合要求的 Python，使用已确认版本的解释器重新创建 `.venv` |
+| 找不到 `adb` | 将 Platform-Tools 加入 PATH，重新打开 PowerShell；`Get-Command adb` 检查实际路径 |
+| 手机未显示或未授权 | 检查数据线、设备管理器的厂商驱动及手机授权弹窗 |
+| 提示未初始化 Kea2 | 确认 `--root` 中有 `configs/`；对新的 wheel 工作目录执行 `python -m kea2.cli init` |
+| 终端窗口关闭后任务异常 | 重新启动同一工作目录，检查设备残留 Monkey / Fastbot，达标且上报失败的记录可尝试补报 |
+| 中文日志异常 | 本版本将子进程和保存的日志、JSON、HTML 设为 UTF-8；手工编辑设置时也保存为 UTF-8 |
+
+本仓库当前自动验证在 macOS 上执行；Windows 信号分支有模拟测试，真实 Windows 设备运行需按[发布验收](release.md#发布验收)核验。
