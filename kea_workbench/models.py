@@ -24,7 +24,7 @@ class RunConfig(BaseModel):
     package: str = Field(default="com.ugreen.iot", pattern=r"^[A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+$")
     runningMinutes: int = Field(default=600, ge=1, le=10080)
     maxStep: int = Field(default=99999, ge=1, le=2147483647)
-    throttle: int = Field(default=300, ge=0, le=60000)
+    throttle: int = Field(default=500, ge=0, le=60000)
     takeScreenshots: bool = True
     preFailureScreenshots: int = Field(default=20, ge=0, le=1000)
     postFailureScreenshots: int = Field(default=5, ge=0, le=1000)
