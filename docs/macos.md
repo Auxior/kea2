@@ -1,6 +1,6 @@
 # macOS 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.2 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.3 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -30,7 +30,7 @@ command -v adb
 
 ### 推荐：双击自动准备和启动
 
-完整解压 0.1.2 源码包后，双击根目录的 `start-macos.command`，在 Terminal 中自动启动。需先安装 Python 3.11+；脚本会查找已有虚拟环境和 PATH 中的 Python，并兼容 Homebrew 常用目录。脚本以自身所在目录作为工作目录，支持含空格和中文的路径。
+完整解压 0.1.3 源码包后，双击根目录的 `start-macos.command`，在 Terminal 中自动启动。需先安装 Python 3.11+；脚本会查找已有虚拟环境和 PATH 中的 Python，并兼容 Homebrew 常用目录。脚本以自身所在目录作为工作目录，支持含空格和中文的路径。
 
 启动过程自动创建或复用 `.venv`，核验应用版本、直接依赖和依赖完整性；需要安装时使用官方 PyPI。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 macOS Platform-Tools 到本工具 `tools/`，不会更改系统配置。若 `configs/` 缺失会自动初始化。服务就绪后打开默认浏览器，默认地址 `http://127.0.0.1:4320/`。
 
@@ -42,19 +42,19 @@ chmod +x start-macos.command
 
 若系统安全设置阻止打开，请对可信来源的脚本使用 Finder 中的“打开”或系统设置允许该脚本运行。跨系统复制的 `.venv` 无法使用时，先重命名该目录再重新启动；保持源码包文件完整，不要只移动脚本。
 
-重复双击只打开本目录已有服务的页面，正在准备时提示返回已有窗口。端口被其他应用占用时不会打开该应用；必要时从 Terminal 指定端口和包源：
+重复双击只打开本目录已有服务的页面，自动换过端口时也会找回实际地址；正在准备时提示返回已有窗口。优先使用端口 4320，被其他应用占用时由系统分配可用端口，终端地址和浏览器访问地址同步更新；必要时从 Terminal 指定首选端口和包源：
 
 ```sh
 KEA2_PORT=4321 KEA2_PIP_INDEX_URL=https://pypi.org/simple ./start-macos.command
 ```
 
-保持启动 Terminal 打开。退出前先在网页停止测试并等待报告、最终同步，再按一次 Ctrl+C；脚本会等待服务正常清理。浏览器未能自动打开时，复制窗口打印的 URL 手动访问，服务仍会运行。
+关闭原始启动 Terminal 会退出服务并释放端口；启动器被强制结束时，服务通过控制管道检测父进程退出，清理阻塞时最多等待约 5 秒后结束。为保留完整报告，建议先在网页停止测试并等待最终同步，再按一次 Ctrl+C 或关闭终端。重复双击打开的窗口不持有服务，关闭它不影响原始启动窗口。浏览器未能自动打开时，复制终端打印的实际 URL 手动访问。
 
 以下是手动安装方式；使用源码包双击启动无需逐条执行。
 
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.2.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.3.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```sh
 cd "$HOME/Tools/kea2-workbench"
@@ -83,7 +83,7 @@ python3 -m venv .venv
 mkdir -p "$HOME/Kea2Data"
 cd "$HOME/Kea2Data"
 python3 -m venv .venv
-./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.2-py3-none-any.whl
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.3-py3-none-any.whl
 ./.venv/bin/python -m kea2.cli init
 ```
 
@@ -100,7 +100,7 @@ cd "$HOME/Tools/kea2-workbench"
 ./.venv/bin/python -m kea_workbench --host 127.0.0.1 --port 4320 --root .
 ```
 
-wheel 用户改为 `cd "$HOME/Kea2Data"`。在浏览器打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)，命令不会自动打开网页。同一虚拟环境的等价入口为：
+wheel 用户改为 `cd "$HOME/Kea2Data"`。默认在浏览器打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)，端口被占用时请使用终端打印的实际地址。手动命令不会自动打开网页。同一虚拟环境的等价入口为：
 
 ```sh
 ./.venv/bin/kea2-web --root .
@@ -112,7 +112,7 @@ wheel 用户改为 `cd "$HOME/Kea2Data"`。在浏览器打开 [http://127.0.0.1:
 "$HOME/Tools/kea2-workbench/.venv/bin/python" -m kea_workbench --root "$HOME/Tools/kea2-workbench" --port 4321
 ```
 
-对应网页为 [http://127.0.0.1:4321/](http://127.0.0.1:4321/)。更改端口可解决占用问题；一个工作目录只运行一个服务。
+首选网页为 [http://127.0.0.1:4321/](http://127.0.0.1:4321/)。首选端口被占用时自动选择其他可用端口，请使用终端打印的实际地址；一个工作目录只运行一个服务。
 
 保持 Terminal 打开，长时间测试期间保持电脑唤醒及 USB 可用。可按需要在系统设置中调整睡眠策略，或用系统 `caffeinate` 命令包装启动：
 
@@ -120,7 +120,7 @@ wheel 用户改为 `cd "$HOME/Kea2Data"`。在浏览器打开 [http://127.0.0.1:
 caffeinate -i ./.venv/bin/python -m kea_workbench --root .
 ```
 
-结束时先在网页点击“停止测试”，等待报告与最终上报完成，再在 Terminal 按一次 Ctrl+C。macOS 停止向独立会话中的 Kea2 子进程发送 SIGINT，触发上游清理；超过 90 秒后强制结束并记录设备清理未确认。强制关闭终端或杀进程可能丢失收尾数据。
+关闭原始启动 Terminal 会结束工作台服务并释放端口。为保留完整数据，建议先在网页点击“停止测试”，等待报告与最终上报完成，再按一次 Ctrl+C 或关闭窗口。页面“停止测试”向独立会话中的 Kea2 子进程发送 SIGINT，触发上游清理；超过 90 秒后强制结束并记录设备清理未确认。直接关闭终端或杀进程时，设备清理与报告可能未完成。
 
 ## 4. 连接设备
 
@@ -166,7 +166,7 @@ adb devices -l
 
 ## 7. 平台上报流程
 
-1. 连接可访问内部平台和 MinIO 的网络，进入网页“设置”，填写平台接口、前端地址、服务/能力 ID、MinIO 地址、已创建的桶、前缀和凭据；报告 URL 需要能被使用者的浏览器访问。
+1. 连接可访问内部平台和 MinIO 的网络，进入网页“设置”，核对平台接口、前端地址、服务/能力 ID、MinIO 地址、已创建的桶和前缀。Access Key / Secret Key 未配置或留空时自动使用默认值，也可填写自定义凭据；报告 URL 需要能被使用者的浏览器访问。
 2. 选择已关联的 App 并开启“同步到测试平台”，配置时长至少 5 分钟。确保步数上限不会在实际探索满 300 秒前耗尽；准备和收尾不计时，达标前发现 Crash / ANR 会阻止资格取得。
 3. 达标后通过后台线程持续生成快照、上传报告并提交平台记录，观察“同步中 / 已上报 / 上报失败”。同步循环通常等待 15 秒，生成和网络耗时会增加实际间隔。
 4. 有平台回执后点击“平台记录”跳转任务中心；在线报告地址保存在 `run.json` 的 `delivery.reportUrl`。平台实际展示名称依部署版本而定。

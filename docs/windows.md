@@ -1,6 +1,6 @@
 # Windows 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.2 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.3 / Kea2 1.2.4。命令均在 **PowerShell** 中执行。示例路径 `C:\Tools\kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -22,13 +22,13 @@
 
 ### 推荐：双击自动准备和启动
 
-完整解压 0.1.2 源码包后，双击根目录的 `start-windows.bat`。先安装 Python 3.11+（包含 Python Launcher 或加入 PATH）。脚本自动使用自身所在目录，不受资源管理器当前目录影响，也支持含空格和中文的路径。
+完整解压 0.1.3 源码包后，双击根目录的 `start-windows.bat`。先安装 Python 3.11+（包含 Python Launcher 或加入 PATH）。脚本自动使用自身所在目录，不受资源管理器当前目录影响，也支持含空格和中文的路径。
 
 启动过程会检查 Python 版本，在本工具目录创建或复用 `.venv`，检查应用版本、直接依赖和依赖完整性；需要安装时通过官方 PyPI 更新。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 Windows Platform-Tools 到 `tools/`，不会更改系统 PATH。如果 `configs/` 缺失，也会自动初始化。服务就绪后打开默认浏览器，默认地址仍为 `http://127.0.0.1:4320/`。
 
 首次准备需要访问官方 PyPI 和（ADB 缺失时）Google 下载服务。已安装且版本一致的依赖会复用，后续启动不需要重新联网下载。Python 和手机厂商 USB 驱动需预先安装；手机尚未连接也可以打开工作台。失败时窗口保留错误和安装日志，按提示排查后重试。跨系统复制的 `.venv` 无法使用时，先将其重命名，再重新双击；不要只复制脚本。
 
-同一目录已由脚本启动且端口相同时，重复双击只打开已有页面，不重复启动服务；已有窗口仍在准备时会提示返回该窗口。端口被其他应用占用时不会打开其他服务。若需更换端口或包源，可在 PowerShell 设置当前会话变量后运行：
+同一目录重复双击只打开已有页面，不重复启动服务；即使首次启动自动换过端口，也会找回实际地址。已有窗口仍在准备时会提示返回该窗口。优先使用端口 4320；被其他应用占用时，由系统分配可用端口，终端地址和浏览器访问地址同步更新。若需指定首选端口或包源，可在 PowerShell 设置当前会话变量后运行：
 
 ```powershell
 $env:KEA2_PORT = '4321'
@@ -36,13 +36,13 @@ $env:KEA2_PIP_INDEX_URL = 'https://pypi.org/simple'
 .\start-windows.bat
 ```
 
-服务启动后请保持窗口打开；退出前先在网页停止测试并等待上报，再按一次 Ctrl+C。安装失败、ADB 下载失败或浏览器无法打开时，可查看窗口提示；浏览器失败不影响已启动的服务，可以手动打开打印的 URL。
+关闭原始启动窗口会退出服务并释放端口；启动器被强制结束时，服务也会通过控制管道检测到父进程退出，清理阻塞时最多等待约 5 秒后结束。为保留完整报告，建议先在网页停止测试、等待最终上报，再按一次 Ctrl+C 或关闭窗口。重复双击打开的窗口不持有服务，关闭它不影响原始启动窗口。浏览器未能自动打开时，可手动打开终端打印的实际 URL。
 
 以下是手动安装方式；使用源码包双击启动时无需逐条执行。
 
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.2.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.3.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```powershell
 Set-Location 'C:\Tools\kea2-workbench'
@@ -67,7 +67,7 @@ wheel 只包含应用和默认连接配置，不含工作目录的官方配置�
 New-Item -ItemType Directory -Force 'C:\Tools\Kea2Data'
 Set-Location 'C:\Tools\Kea2Data'
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .\kea2_workbench-0.1.2-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .\kea2_workbench-0.1.3-py3-none-any.whl
 .\.venv\Scripts\python.exe -m kea2.cli init
 ```
 
@@ -84,7 +84,7 @@ Set-Location 'C:\Tools\kea2-workbench'
 .\.venv\Scripts\python.exe -m kea_workbench --host 127.0.0.1 --port 4320 --root .
 ```
 
-wheel 用户将上述目录替换为 `C:\Tools\Kea2Data`。打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)，启动命令不会自动打开浏览器。也可使用同一虚拟环境的入口：
+wheel 用户将上述目录替换为 `C:\Tools\Kea2Data`。默认打开 [http://127.0.0.1:4320/](http://127.0.0.1:4320/)，端口被占用时请使用终端打印的实际地址。手动启动命令不会自动打开浏览器。也可使用同一虚拟环境的入口：
 
 ```powershell
 .\.venv\Scripts\kea2-web.exe --root .
@@ -96,9 +96,9 @@ wheel 用户将上述目录替换为 `C:\Tools\Kea2Data`。打开 [http://127.0.
 & 'C:\Tools\kea2-workbench\.venv\Scripts\python.exe' -m kea_workbench --root 'C:\Tools\kea2-workbench' --port 4321
 ```
 
-此时网页地址为 [http://127.0.0.1:4321/](http://127.0.0.1:4321/)。端口冲突时更换端口；不要重复启动占用同一工作目录的服务。
+首选网页地址为 [http://127.0.0.1:4321/](http://127.0.0.1:4321/)。首选端口被占用时自动选择其他可用端口，请使用终端打印的实际地址；不要重复启动占用同一工作目录的服务。
 
-保持启动终端打开、电脑和 USB 连接可用。结束使用时先在网页停止测试，等运行变为终态并完成最终上报，再在 PowerShell 按一次 Ctrl+C。不要直接关闭终端或结束进程。Windows 停止通过专用子进程组的 Ctrl+Break 转换为 Kea2 的中断清理流程；超出 90 秒会强制结束并记录清理未确认。
+运行期间保持电脑和 USB 连接可用。关闭原始启动终端会结束工作台服务并释放端口；如果正在测试，报告和设备清理可能未完成。建议先在网页停止测试，等运行变为终态并完成最终上报，再按一次 Ctrl+C 或关闭窗口。页面“停止测试”通过专用子进程组的 Ctrl+Break 转换为 Kea2 的中断清理流程；超出 90 秒会强制结束并记录清理未确认。
 
 ## 4. 连接设备
 
@@ -145,7 +145,7 @@ adb devices -l
 
 ## 7. 平台上报流程
 
-1. 连接可访问内部测试平台与 MinIO 的网络，在网页“设置”中填写结果上报接口、平台页面地址、服务 ID、能力 ID、MinIO 地址、桶、前缀和访问凭据。桶须已创建，报告地址需能被查看报告的浏览器访问。
+1. 连接可访问内部测试平台与 MinIO 的网络，在网页“设置”中核对结果上报接口、平台页面地址、服务 ID、能力 ID、MinIO 地址、桶和前缀。Access Key / Secret Key 未配置或留空时自动使用默认值，也可填写自定义凭据。桶须已创建，报告地址需能被查看报告的浏览器访问。
 2. 选择已关联项目的 App，开启“同步到测试平台”，设置时长至少 5 分钟，并确保最大步数不会在实际探索满 300 秒前耗尽。门槛不包含准备与收尾时间；达标前发现 Crash / ANR 的运行不会取得上报资格。
 3. 达标后后台持续生成并上传报告快照，提交平台结果。等待约 15 秒是同步循环间隔，生成和上传耗时可能使实际间隔更长；观察“同步中 / 已上报 / 上报失败”。
 4. 出现“平台记录”时可跳到平台任务中心。在线 HTML 报告地址是 `run.json` 中 `delivery.reportUrl`；平台列表和报告入口以部署的实际界面为准。
