@@ -9,8 +9,8 @@
     "endpoint": "http://aiot-testing.ugreeniot.com:19000",
     "bucket": "autotest-reports",
     "prefix": "kea2",
-    "accessKey": "",
-    "secretKey": "",
+    "accessKey": "KUC7R1X9QJ4BYEV4ZNZ8",
+    "secretKey": "xMq9HNdjDmsWPfVPcKuuis+hYXHx34rR7MP4+kqx",
     "publicBaseUrl": ""
   }
 }

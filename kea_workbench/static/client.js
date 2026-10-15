@@ -243,12 +243,12 @@ $("settings-form").addEventListener("submit", async (event) => {
       if ($(`${section}-${key}`))
         next[section][key] = $(`${section}-${key}`).value.trim();
   try {
-    await request("/api/settings", {
+    const saved = await request("/api/settings", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(next),
     });
-    settings = next;
+    settings = saved.settings;
     $("settings-dialog").close();
     message("设置已保存，对之后新建的测试生效。");
   } catch (error) {

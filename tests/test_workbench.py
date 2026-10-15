@@ -100,6 +100,52 @@ def test_standalone_settings_fallback_and_local_utf8_override(tmp_path, settings
     assert "中文报告" in (tmp_path / "data/settings.json").read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("source", ["data/settings.json", "settings.example.json"])
+@pytest.mark.parametrize("value", [None, "", " \t\n"])
+def test_unconfigured_minio_credentials_use_defaults(tmp_path, settings, source, value):
+    configured = copy.deepcopy(settings)
+    configured["minio"]["accessKey"] = value
+    configured["minio"]["secretKey"] = value
+    write_json(tmp_path / source, configured)
+    effective = load_settings(tmp_path)
+    for field in ("accessKey", "secretKey"):
+        assert effective["minio"][field] == settings["minio"][field]
+
+
+def test_missing_credentials_preserve_explicit_values_and_other_settings(tmp_path, settings):
+    configured = copy.deepcopy(settings)
+    configured["minio"].pop("secretKey")
+    configured["minio"]["accessKey"] = "custom-access"
+    configured["minio"]["prefix"] = "custom-prefix"
+    write_json(tmp_path / "data/settings.json", configured)
+    effective = load_settings(tmp_path)
+    assert effective["minio"]["accessKey"] == "custom-access"
+    assert effective["minio"]["secretKey"] == settings["minio"]["secretKey"]
+    assert effective["minio"]["prefix"] == "custom-prefix"
+    assert effective["platform"] == configured["platform"]
+
+
+def test_settings_save_resolves_defaults_for_ui_runtime_and_restart(tmp_path, settings):
+    configured = copy.deepcopy(settings)
+    configured["minio"].pop("accessKey")
+    configured["minio"]["secretKey"] = ""
+    app = create_app(tmp_path)
+    with TestClient(app) as client:
+        response = client.put("/api/settings", json=configured)
+        assert response.status_code == 200
+        assert response.json()["settings"] == settings
+        assert client.get("/api/config").json()["settings"] == settings
+        assert app.state.manager.settings == settings
+        assert load_settings(tmp_path) == settings
+
+        configured["minio"].update(accessKey="custom-access", secretKey="custom-secret")
+        response = client.put("/api/settings", json=configured)
+        assert response.status_code == 200
+        assert response.json()["settings"] == configured
+        assert client.get("/api/config").json()["settings"] == configured
+        assert load_settings(tmp_path) == configured
+
+
 def test_windows_stop_uses_process_group_break_and_cleanup_handler(monkeypatch):
     from kea_workbench import runner
 

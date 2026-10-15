@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .engine import Manager, devices
 from .models import PROJECTS, RunConfig
-from .storage import load_settings, write_json
+from .storage import load_settings, resolve_settings, write_json
 
 
 def create_app(root=None):
@@ -53,9 +53,10 @@ def create_app(root=None):
             assert body["minio"]["bucket"] and body["minio"]["prefix"]
         except (KeyError, AssertionError):
             raise HTTPException(422, "平台与 MinIO 配置不完整或地址无效")
+        body = resolve_settings(body)
         write_json(root / "data/settings.json", body)
         manager.settings = body
-        return {"saved": True}
+        return {"saved": True, "settings": body}
 
     @app.get("/api/devices")
     def list_devices():
