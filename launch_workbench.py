@@ -15,6 +15,8 @@ from urllib.request import ProxyHandler, build_opener, urlopen
 import webbrowser
 import zipfile
 
+from kea_workbench.hosts import ensure_report_hosts
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_INDEX = "https://pypi.org/simple"
 
@@ -243,6 +245,7 @@ def main():
     port = int(os.environ.get("KEA2_PORT", "4320"))
     if not 1 <= port <= 65535:
         raise RuntimeError("KEA2_PORT 必须为 1–65535 的端口号。")
+    ensure_report_hosts()
     ready_file = root / "data/launcher.json"
     for url in (saved_address(ready_file, root), f"http://127.0.0.1:{port}/"):
         if url and healthy(url, root):

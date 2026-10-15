@@ -32,7 +32,9 @@ command -v adb
 
 完整解压 0.1.3 源码包后，双击根目录的 `start-macos.command`，在 Terminal 中自动启动。需先安装 Python 3.11+；脚本会查找已有虚拟环境和 PATH 中的 Python，并兼容 Homebrew 常用目录。脚本以自身所在目录作为工作目录，支持含空格和中文的路径。
 
-启动过程自动创建或复用 `.venv`，核验应用版本、直接依赖和依赖完整性；需要安装时使用官方 PyPI。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 macOS Platform-Tools 到本工具 `tools/`，不会更改系统配置。若 `configs/` 缺失会自动初始化。服务就绪后打开默认浏览器，默认地址 `http://127.0.0.1:4320/`。
+启动过程自动创建或复用 `.venv`，核验应用版本、直接依赖和依赖完整性；需要安装时使用官方 PyPI。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 macOS Platform-Tools 到本工具 `tools/`，不会更改系统 PATH。若 `configs/` 缺失会自动初始化。服务就绪后打开默认浏览器，默认地址 `http://127.0.0.1:4320/`。
+
+临时兼容报告平台域名：每次启动（包括重复双击、`python -m kea_workbench` 和 `kea2-web`）检查 `/etc/hosts` 中的 `192.168.55.199 aitest_engine_dev.ugreencloud.com`。已有唯一正确映射时跳过，不请求权限；缺失则添加，其他 IP 或重复映射则合并为这一条，保留其他域名、同一行的别名和注释。需要修改时明确提示，通过 sudo 仅为配置助手提权；请在 Terminal 输入本机管理员密码，输入不回显。完成后执行 `dscacheutil -flushcache` 和 `killall -HUP mDNSResponder` 刷新 DNS，再校验 hosts。取消授权、无管理员权限或刷新失败会中止本次启动，错误保留在 Terminal。工作台本身继续以原用户权限运行。该系统映射在退出后保留，后续收到移除通知时再撤销临时兼容措施。
 
 首次准备需要访问官方 PyPI 和（ADB 缺失时）Google 下载服务，安装完成后依赖版本一致则直接复用。Python 本身需预装；无需先连接手机即可打开工作台。失败时 Terminal 保留错误和安装日志。若 `.command` 丢失可执行权限，在源码根目录执行一次：
 
@@ -180,6 +182,7 @@ adb devices -l
 |---|---|
 | Python 版本不满足或依赖安装失败 | 确认解释器版本/架构，使用对应架构 Python 重新创建 `.venv`，检查包源网络 |
 | 隔离构建找不到 `setuptools>=77` | 使用 `pip install --index-url https://pypi.org/simple .`；检查日志中的包源地址，参见上文安装说明 |
+| 报告域名配置或 DNS 刷新失败 | 查看 Terminal 中的 sudo 或 DNS 命令错误；需使用具有 sudo 权限的本机管理员账户，在密码提示时授权，再重新启动。不要对整个工作台执行 sudo |
 | `adb: command not found` | 用 `command -v adb` 检查 PATH，在能找到 ADB 的新 Terminal 会话重新启动服务 |
 | 手机不可选 | 检查授权、数据线、扩展坞，确认 `adb devices -l` 为 `device` |
 | Kea2 未初始化 | `--root` 中须有 `configs/`，新 wheel 工作目录先运行 `python -m kea2.cli init` |
