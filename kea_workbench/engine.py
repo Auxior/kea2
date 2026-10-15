@@ -57,7 +57,7 @@ def command(config: RunConfig, directory: Path, run_id):
         sys.executable,
         "-u",
         "-m",
-        "kea_workbench.runner" if sys.platform == "win32" else "kea2.cli",
+        "kea_workbench.runner",
         "run",
         "-s",
         config.serial,

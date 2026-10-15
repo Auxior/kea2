@@ -183,7 +183,17 @@ adb devices -l
 | `adb: command not found` | 用 `command -v adb` 检查 PATH，在能找到 ADB 的新 Terminal 会话重新启动服务 |
 | 手机不可选 | 检查授权、数据线、扩展坞，确认 `adb devices -l` 为 `device` |
 | Kea2 未初始化 | `--root` 中须有 `configs/`，新 wheel 工作目录先运行 `python -m kea2.cli init` |
+| 测试启动报 `IsADirectoryError`，路径含 `fastbot_configs/__pycache__` | Kea2 1.2.4 的配置同步误复制了缓存目录。安装包含此修复的工作台后，从 Web 页面重新创建测试；恢复步骤见下文 |
 | 电脑睡眠或拔线后异常终止 | 保持唤醒/连接，查看日志与设备残留进程后新建任务；不会自动续跑旧任务 |
 | 原生报告缺失 | 查看 `console.log`，如果生成过补充报告，还可查 `report-generation.log`；清理未完成时数据可能不完整 |
+
+遇到上述缓存目录错误时，关闭工作台，在包含本次修复的源码根目录执行以下命令，再启动工作台。即使工具版本号仍为 0.1.3，也应重新安装，让测试子进程使用修复后的入口：
+
+```sh
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple --force-reinstall --no-deps .
+./start-macos.command
+```
+
+旧版用户请先按安装说明解压修复后的源码并准备依赖；保留原工作目录的 `configs/`、`data/` 和 `artifacts/`，按原 `--root` 启动可继续查看历史记录。无需删除 SDK 缓存或重置配置；手工运行 `python -m kea2.cli run` 仍会触发上游缺陷，此兼容修复作用于工作台创建的测试任务。失败任务不会自动续跑，需要重新创建。
 
 自动化测试不能替代真实手机验收；发布时的检查项见[发布验收](release.md#发布验收)。

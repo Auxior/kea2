@@ -161,7 +161,17 @@ adb devices -l
 | 找不到 `adb` | 将 Platform-Tools 加入 PATH，重新打开 PowerShell；`Get-Command adb` 检查实际路径 |
 | 手机未显示或未授权 | 检查数据线、设备管理器的厂商驱动及手机授权弹窗 |
 | 提示未初始化 Kea2 | 确认 `--root` 中有 `configs/`；对新的 wheel 工作目录执行 `python -m kea2.cli init` |
+| 测试启动报 `IsADirectoryError`，路径含 `fastbot_configs\__pycache__` | Kea2 1.2.4 的配置同步误复制了缓存目录。安装包含此修复的工作台后，从 Web 页面重新创建测试；恢复步骤见下文 |
 | 终端窗口关闭后任务异常 | 重新启动同一工作目录，检查设备残留 Monkey / Fastbot，达标且上报失败的记录可尝试补报 |
 | 中文日志异常 | 本版本将子进程和保存的日志、JSON、HTML 设为 UTF-8；手工编辑设置时也保存为 UTF-8 |
+
+遇到上述缓存目录错误时，关闭工作台，在包含本次修复的源码根目录执行以下命令，再启动工作台。即使工具版本号仍为 0.1.3，也应重新安装，让测试子进程使用修复后的入口：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple --force-reinstall --no-deps .
+.\start-windows.bat
+```
+
+旧版用户请先按安装说明解压修复后的源码并准备依赖；保留原工作目录的 `configs/`、`data/` 和 `artifacts/`，按原 `--root` 启动可继续查看历史记录。无需删除 SDK 缓存或重置配置；手工运行 `python -m kea2.cli run` 仍会触发上游缺陷，此兼容修复作用于工作台创建的测试任务。失败任务不会自动续跑，需要重新创建。
 
 本仓库当前自动验证在 macOS 上执行；Windows 信号分支有模拟测试，真实 Windows 设备运行需按[发布验收](release.md#发布验收)核验。
