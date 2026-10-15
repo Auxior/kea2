@@ -1,16 +1,19 @@
 import io
 import json
+import os
 from pathlib import Path
 import signal
 import socket
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 import zipfile
 
 import pytest
 
 import launch_workbench as launcher
+from kea_workbench.__main__ import bind_listener
 
 
 @pytest.mark.parametrize("payload,expected", [
@@ -111,19 +114,19 @@ def test_missing_adb_uses_virtual_environment_certificates_and_local_path(tmp_pa
     assert commands[0][-1] == "version"
 
 
-def test_wrong_service_port_is_rejected_before_installation(tmp_path, monkeypatch):
-    (tmp_path / "pyproject.toml").touch()
-    monkeypatch.setattr(launcher, "ROOT", tmp_path)
-    monkeypatch.setattr(launcher, "healthy", lambda *args: False)
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        listener.listen()
-        monkeypatch.setenv("KEA2_PORT", str(listener.getsockname()[1]))
-        with pytest.raises(RuntimeError, match="其他服务占用"):
-            launcher.main()
+def test_listener_reuses_preferred_port_after_close():
+    first = bind_listener("127.0.0.1", 0)
+    port = first.getsockname()[1]
+    first.close()
+    restarted = bind_listener("127.0.0.1", port)
+    try:
+        assert restarted.getsockname()[1] == port
+    finally:
+        restarted.close()
 
 
-def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp_path, monkeypatch):
+@pytest.mark.parametrize("occupied", [False])
+def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp_path, monkeypatch, occupied):
     repository = Path(__file__).resolve().parents[1]
     (tmp_path / "pyproject.toml").touch()
     (tmp_path / "configs").mkdir()
@@ -135,9 +138,12 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
         return Path(sys.executable)
 
     monkeypatch.setattr(launcher, "prepare_python", python)
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        port = listener.getsockname()[1]
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+    if not occupied:
+        listener.close()
     monkeypatch.setenv("KEA2_PORT", str(port))
     original_popen = subprocess.Popen
     processes = []
@@ -152,12 +158,18 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
 
     def browser(url):
         assert launcher.healthy(url, tmp_path)
+        if occupied:
+            assert url != f"http://127.0.0.1:{port}/"
+        else:
+            assert url == f"http://127.0.0.1:{port}/"
+        assert launcher.saved_address(tmp_path / "data/launcher.json", tmp_path) == url
         opened.append(url)
         count = len(processes)
         monkeypatch.setattr(launcher, "open_page", opened.append)
         assert launcher.main() == 0
         assert len(processes) == count
-        processes[-1].send_signal(signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGINT)
+        processes[-1].stdin.write(b"s")
+        processes[-1].stdin.flush()
 
     monkeypatch.setattr(launcher, "open_page", browser)
     try:
@@ -170,6 +182,132 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
         assert len(processes) == 2
         assert len(opened) == 4
     finally:
+        listener.close()
         for process in processes:
             if process.poll() is None:
                 launcher.stop_service(process)
+
+
+def wait_for(test, timeout=12):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if test():
+            return
+        time.sleep(0.05)
+    raise AssertionError("等待测试条件超时")
+
+
+@pytest.mark.parametrize("termination", ["kill", "hangup", "terminal"])
+def test_closing_launcher_releases_service_port(tmp_path, termination):
+    if termination != "kill" and os.name == "nt":
+        pytest.skip("SIGHUP / PTY 仅适用于 POSIX；父进程终止检测跨平台运行")
+    repository = Path(__file__).resolve().parents[1]
+    (tmp_path / "pyproject.toml").touch()
+    (tmp_path / "configs").mkdir()
+    driver = """import os, sys
+from pathlib import Path
+if sys.argv[2] == 'terminal':
+    import fcntl, termios
+    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+import launch_workbench as launcher
+launcher.ROOT = Path(sys.argv[1])
+def python(root, env):
+    return Path(sys.executable)
+launcher.prepare_python = python
+launcher.prepare_adb = lambda *args: None
+launcher.open_page = lambda url: None
+launcher.main()
+"""
+    env = {**os.environ, "PYTHONPATH": str(repository)}
+    with socket.socket() as temporary:
+        temporary.bind(("127.0.0.1", 0))
+        env["KEA2_PORT"] = str(temporary.getsockname()[1])
+    master = slave = None
+    options = {}
+    if termination == "terminal":
+        import pty
+
+        master, slave = pty.openpty()
+        options = {"stdin": slave, "stdout": slave, "stderr": slave, "start_new_session": True}
+    else:
+        options = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    process = subprocess.Popen([sys.executable, "-c", driver, str(tmp_path), termination], cwd=repository, env=env, **options)
+    state = tmp_path / "data/launcher.json"
+    url = None
+    try:
+        def ready():
+            nonlocal url
+            url = launcher.saved_address(state, tmp_path)
+            return url and launcher.healthy(url, tmp_path)
+
+        wait_for(ready)
+        if termination == "terminal":
+            os.close(master)
+            master = None
+        elif termination == "hangup":
+            process.send_signal(signal.SIGHUP)
+        else:
+            process.kill()
+        process.wait(timeout=10)
+        port = json.loads(state.read_text())["port"]
+
+        def released():
+            with socket.socket() as connection:
+                connection.settimeout(0.2)
+                return connection.connect_ex(("127.0.0.1", port)) != 0
+
+        wait_for(released)
+        restarted = bind_listener("127.0.0.1", port)
+        try:
+            assert restarted.getsockname()[1] == port
+        finally:
+            restarted.close()
+    finally:
+        if master is not None:
+            os.close(master)
+        if slave is not None:
+            os.close(slave)
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if url and launcher.healthy(url, tmp_path):
+            state_data = json.loads(state.read_text())
+            os.kill(state_data["pid"], signal.SIGTERM)
+
+
+def test_parent_disappearance_exits_even_if_shutdown_cleanup_blocks(tmp_path):
+    repository = Path(__file__).resolve().parents[1]
+    state = tmp_path / "ready.json"
+    driver = """import sys, time
+import kea_workbench.__main__ as cli
+original = cli.create_app
+def blocked(root):
+    app = original(root)
+    app.state.manager.close = lambda: time.sleep(30)
+    return app
+cli.create_app = blocked
+sys.argv = ['kea2-web', '--root', sys.argv[1], '--port', '0', '--watch-parent', '--ready-file', sys.argv[2]]
+cli.main()
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", driver, str(tmp_path), str(state)],
+        cwd=repository, env={**os.environ, "PYTHONPATH": str(repository)},
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        wait_for(lambda: (url := launcher.saved_address(state, tmp_path)) and launcher.healthy(url, tmp_path))
+        port = json.loads(state.read_text())["port"]
+        process.stdin.close()
+        process.wait(timeout=9)
+        assert process.returncode == 0
+        restarted = bind_listener("127.0.0.1", port)
+        try:
+            assert restarted.getsockname()[1] == port
+        finally:
+            restarted.close()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if not process.stdin.closed:
+            process.stdin.close()

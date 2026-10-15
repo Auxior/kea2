@@ -4,8 +4,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import signal
-import socket
 import ssl
 import subprocess
 import sys
@@ -188,28 +186,52 @@ def prepare_adb(root, env, python):
     say("ADB 检查通过；手机可以在工作台打开后连接。")
 
 
-def wait_ready(process, url, root, timeout=30):
+def saved_address(path, root, pid=None):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(data, dict)
+            or data.get("root") != str(root)
+            or not isinstance(data.get("port"), int)
+            or not 1 <= data["port"] <= 65535
+            or pid is not None and data.get("pid") != pid
+        ):
+            return None
+        return f"http://127.0.0.1:{data['port']}/"
+    except (OSError, ValueError):
+        return None
+
+
+def wait_ready(process, root, ready_file, timeout=30):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError("工作台服务已退出，请查看上方启动日志。")
-        if healthy(url, root):
-            return
+        url = saved_address(ready_file, root, process.pid)
+        if url and healthy(url, root):
+            return url
         time.sleep(0.2)
     raise RuntimeError("等待工作台启动超时，请查看上方日志。")
 
 
 def stop_service(process):
-    if process.poll() is not None:
-        return
-    say("正在退出工作台，等待测试清理、报告和最终同步；请保留此窗口……")
-    process.send_signal(signal.CTRL_BREAK_EVENT if sys.platform == "win32" else signal.SIGINT)
-    while True:
+    if process.poll() is None:
+        say("正在退出工作台，等待测试清理、报告和最终同步；请保留此窗口……")
         try:
-            process.wait()
-            return
-        except KeyboardInterrupt:
-            say("仍在等待工作台正常退出，请勿关闭窗口。")
+            process.stdin.write(b"s")
+            process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+        while True:
+            try:
+                process.wait()
+                break
+            except KeyboardInterrupt:
+                say("仍在等待工作台正常退出，请勿关闭窗口。")
+    try:
+        process.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
 
 
 def main():
@@ -221,34 +243,28 @@ def main():
     port = int(os.environ.get("KEA2_PORT", "4320"))
     if not 1 <= port <= 65535:
         raise RuntimeError("KEA2_PORT 必须为 1–65535 的端口号。")
-    url = f"http://127.0.0.1:{port}/"
-    if healthy(url, root):
-        say("本工作目录的工作台已运行，打开已有页面。")
-        open_page(url)
-        return 0
+    ready_file = root / "data/launcher.json"
+    for url in (saved_address(ready_file, root), f"http://127.0.0.1:{port}/"):
+        if url and healthy(url, root):
+            say("本工作目录的工作台已运行，打开已有页面。")
+            open_page(url)
+            return 0
     lock = acquire_lock(root)
     try:
-        with socket.socket() as connection:
-            connection.settimeout(1)
-            # Binding would misclassify recently closed TIME_WAIT connections
-            # as a busy service. Only reject an actual listening server.
-            if connection.connect_ex(("127.0.0.1", port)) == 0:
-                raise RuntimeError(f"端口 {port} 已被其他服务占用，请设置 KEA2_PORT 后重试。") from None
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         python = prepare_python(root, env)
         prepare_adb(root, env, python)
         if not (root / "configs").is_dir():
             say("正在初始化官方 Kea2 配置……")
             run_checked([str(python), "-m", "kea2.cli", "init"], cwd=root, env=env)
-        say("正在启动工作台。退出前请先在页面停止测试，再在此窗口按 Ctrl+C。")
-        options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-                   if sys.platform == "win32" else {"start_new_session": True})
+        say("正在启动工作台。关闭此窗口会退出服务；建议先停止测试并等待报告生成。")
         process = subprocess.Popen(
             [str(python), "-m", "kea_workbench", "--root", str(root),
-             "--host", "127.0.0.1", "--port", str(port)], cwd=root, env=env, **options,
+             "--host", "127.0.0.1", "--port", str(port), "--watch-parent",
+             "--ready-file", str(ready_file)], cwd=root, env=env, stdin=subprocess.PIPE,
         )
         try:
-            wait_ready(process, url, root)
+            url = wait_ready(process, root, ready_file)
             open_page(url)
             return process.wait()
         finally:
