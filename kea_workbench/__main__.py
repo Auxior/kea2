@@ -1,4 +1,5 @@
 import argparse
+import errno
 import os
 from pathlib import Path
 import signal
@@ -14,18 +15,27 @@ from .storage import write_json
 
 def bind_listener(host, preferred_port):
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
-    listener = socket.socket(family, socket.SOCK_STREAM)
+
+    def bind(port):
+        listener = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            if os.name == "nt":
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind((host, port))
+            listener.listen(2048)
+            return listener
+        except BaseException:
+            listener.close()
+            raise
+
     try:
-        if os.name == "nt":
-            listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        else:
-            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind((host, preferred_port))
-        listener.listen(2048)
-        return listener
-    except BaseException:
-        listener.close()
-        raise
+        return bind(preferred_port)
+    except OSError as error:
+        if error.errno not in {errno.EADDRINUSE, errno.EACCES} or preferred_port == 0:
+            raise
+        return bind(0)
 
 
 def watch_parent(server, finished):
@@ -65,6 +75,8 @@ def main():
     finished = threading.Event()
     try:
         port = listener.getsockname()[1]
+        if args.port and port != args.port:
+            print(f"端口 {args.port} 已被占用，自动使用端口 {port}。", flush=True)
         browser_host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(args.host, args.host)
         if ":" in browser_host:
             browser_host = f"[{browser_host}]"

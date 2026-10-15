@@ -114,10 +114,19 @@ def test_missing_adb_uses_virtual_environment_certificates_and_local_path(tmp_pa
     assert commands[0][-1] == "version"
 
 
-def test_listener_reuses_preferred_port_after_close():
+def test_listener_reserves_preferred_port_and_falls_back_without_a_race():
     first = bind_listener("127.0.0.1", 0)
     port = first.getsockname()[1]
-    first.close()
+    try:
+        second = bind_listener("127.0.0.1", port)
+        try:
+            assert second.getsockname()[1] != port
+            with socket.socket() as connection:
+                assert connection.connect_ex(("127.0.0.1", port)) == 0
+        finally:
+            second.close()
+    finally:
+        first.close()
     restarted = bind_listener("127.0.0.1", port)
     try:
         assert restarted.getsockname()[1] == port
@@ -125,7 +134,7 @@ def test_listener_reuses_preferred_port_after_close():
         restarted.close()
 
 
-@pytest.mark.parametrize("occupied", [False])
+@pytest.mark.parametrize("occupied", [False, True])
 def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp_path, monkeypatch, occupied):
     repository = Path(__file__).resolve().parents[1]
     (tmp_path / "pyproject.toml").touch()
