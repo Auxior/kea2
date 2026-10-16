@@ -16,7 +16,7 @@
 
 推荐完整解压源码包后双击根目录中的启动脚本：Windows 使用 `start-windows.bat`，macOS 使用 `start-macos.command`。需预装 Python 3.11+；脚本自动创建/检查 `.venv`，安装或更新 Python 依赖，查找 ADB（缺失时下载官方 Platform-Tools 到本工具 `tools/`），初始化缺失的 Kea2 配置，启动服务并在就绪后打开浏览器。优先使用端口 4320，被占用时自动选择可用端口并打开实际地址；重复双击复用已有服务。关闭原始启动终端会退出服务并释放端口。首次安装需要联网，不会安装系统级 Python 或手机驱动。
 
-临时报告域名兼容：双击及命令行启动都会检查系统 hosts，确保 `192.168.55.199 aitest_engine_dev.ugreencloud.com` 为唯一有效映射。正确则跳过；缺失、重复或 IP 冲突时修正并刷新 DNS，保留其他域名。需要修改时，Windows 显示 UAC 授权，macOS 在 Terminal 提示 sudo 密码；仅配置助手提权，失败时停止本次启动。映射在工作台退出后保留，后续按通知移除此兼容措施。具体权限与故障排查见两系统指南。
+默认测试平台为 [http://aitest_engine.ugreencloud.com/](http://aitest_engine.ugreencloud.com/)，结果上报接口为该站点的 `/api/tasks/external-reports`。真实报告的上传、结果上报及在线访问已验证，详见[报告服务验证记录](docs/report-service-verification.md)。
 
 下面是等价的手动安装和启动方式；双击启动无需逐条执行这些命令。
 

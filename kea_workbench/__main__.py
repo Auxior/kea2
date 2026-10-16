@@ -9,7 +9,6 @@ import threading
 
 import uvicorn
 
-from .hosts import ensure_report_hosts
 from .server import create_app
 from .storage import write_json
 
@@ -71,10 +70,6 @@ def main():
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("端口必须为 0–65535")
-    try:
-        ensure_report_hosts()
-    except RuntimeError as error:
-        parser.exit(1, f"启动失败：{error}\n")
     root = args.root.resolve()
     listener = bind_listener(args.host, args.port)
     finished = threading.Event()

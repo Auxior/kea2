@@ -26,8 +26,6 @@
 
 启动过程会检查 Python 版本，在本工具目录创建或复用 `.venv`，检查应用版本、直接依赖和依赖完整性；需要安装时通过官方 PyPI 更新。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 Windows Platform-Tools 到 `tools/`，不会更改系统 PATH。如果 `configs/` 缺失，也会自动初始化。服务就绪后打开默认浏览器，默认地址仍为 `http://127.0.0.1:4320/`。
 
-临时兼容报告平台域名：每次启动（包括重复双击、`python -m kea_workbench` 和 `kea2-web`）检查 `%SystemRoot%\System32\drivers\etc\hosts` 中的 `192.168.55.199 aitest_engine_dev.ugreencloud.com`。已有唯一正确映射时跳过，不请求权限；缺失则添加，其他 IP 或重复映射则合并为这一条，保留其他域名、同一行的别名和注释。需要修改时明确提示，通过 PowerShell 弹出 UAC，请允许授权或按系统要求提供管理员凭据；仅 hosts 配置助手以管理员权限运行。更新后执行 `ipconfig /flushdns` 刷新 DNS，再校验 hosts，工作台仍以原用户权限运行。拒绝授权、权限受组织策略限制或刷新失败会中止本次启动并保留错误。该系统映射在退出后保留，后续收到移除通知时再撤销临时兼容措施。
-
 首次准备需要访问官方 PyPI 和（ADB 缺失时）Google 下载服务。已安装且版本一致的依赖会复用，后续启动不需要重新联网下载。Python 和手机厂商 USB 驱动需预先安装；手机尚未连接也可以打开工作台。失败时窗口保留错误和安装日志，按提示排查后重试。跨系统复制的 `.venv` 无法使用时，先将其重命名，再重新双击；不要只复制脚本。
 
 同一目录重复双击只打开已有页面，不重复启动服务；即使首次启动自动换过端口，也会找回实际地址。已有窗口仍在准备时会提示返回该窗口。优先使用端口 4320；被其他应用占用时，由系统分配可用端口，终端地址和浏览器访问地址同步更新。若需指定首选端口或包源，可在 PowerShell 设置当前会话变量后运行：
@@ -76,6 +74,8 @@ py -3 -m venv .venv
 `init` 在当前目录生成 `configs/` 和 `quicktest.py`。将此目录作为后续 `--root`，使测试进程能找到上游配置。安装应用不等于初始化工作目录。
 
 首次仅本地测试可直接关闭“同步到测试平台”。开启上报前，在网页右上角“设置”中填写平台及 MinIO 配置。保存结果位于 `<工作目录>\data\settings.json`，任务保存创建时的连接快照。字段说明见[连接设置](usage.md#连接设置)。
+
+默认平台为 `http://aitest_engine.ugreencloud.com`，结果接口为 `http://aitest_engine.ugreencloud.com/api/tasks/external-reports`。已有环境需在“设置”中核对并保存这两个地址；新建测试使用保存后的配置。
 
 ## 3. 启动与退出
 
@@ -160,7 +160,6 @@ adb devices -l
 | 现象 | Windows 检查方式 |
 |---|---|
 | 找不到 `py` / Python 版本过低 | 安装符合要求的 Python，使用已确认版本的解释器重新创建 `.venv` |
-| 报告域名配置或 DNS 刷新失败 | 重新启动并允许 UAC 授权；检查管理员凭据、系统 hosts 权限及组织安全策略是否允许修改，保留窗口中的错误信息 |
 | 找不到 `adb` | 将 Platform-Tools 加入 PATH，重新打开 PowerShell；`Get-Command adb` 检查实际路径 |
 | 手机未显示或未授权 | 检查数据线、设备管理器的厂商驱动及手机授权弹窗 |
 | 提示未初始化 Kea2 | 确认 `--root` 中有 `configs/`；对新的 wheel 工作目录执行 `python -m kea2.cli init` |

@@ -15,17 +15,6 @@ import pytest
 import launch_workbench as launcher
 from kea_workbench.__main__ import bind_listener
 
-ISOLATED_SERVER = (
-    "import kea_workbench.__main__ as cli; "
-    "cli.ensure_report_hosts = lambda: None; cli.main()"
-)
-
-
-@pytest.fixture(autouse=True)
-def isolate_system_hosts(monkeypatch):
-    # Launcher integration tests must never change the developer's hosts file.
-    monkeypatch.setattr(launcher, "ensure_report_hosts", lambda: None)
-
 
 @pytest.mark.parametrize("payload,expected", [
     ({"application": "kea2-workbench", "root": "/work"}, True),
@@ -169,10 +158,7 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
     processes = []
 
     def popen(*args, **kwargs):
-        command, *rest = args
-        if command[1:3] == ["-m", "kea_workbench"]:
-            command = [command[0], "-c", ISOLATED_SERVER, *command[3:]]
-        process = original_popen(command, *rest, **kwargs)
+        process = original_popen(*args, **kwargs)
         processes.append(process)
         return process
 
@@ -238,15 +224,7 @@ def python(root, env):
     return Path(sys.executable)
 launcher.prepare_python = python
 launcher.prepare_adb = lambda *args: None
-launcher.ensure_report_hosts = lambda: None
 launcher.open_page = lambda url: None
-original_popen = launcher.subprocess.Popen
-def isolated_popen(command, **kwargs):
-    if command[1:3] == ['-m', 'kea_workbench']:
-        code = 'import kea_workbench.__main__ as cli; cli.ensure_report_hosts = lambda: None; cli.main()'
-        command = [command[0], '-c', code, *command[3:]]
-    return original_popen(command, **kwargs)
-launcher.subprocess.Popen = isolated_popen
 launcher.main()
 """
     env = {**os.environ, "PYTHONPATH": str(repository)}
@@ -311,7 +289,6 @@ def test_parent_disappearance_exits_even_if_shutdown_cleanup_blocks(tmp_path):
     state = tmp_path / "ready.json"
     driver = """import sys, time
 import kea_workbench.__main__ as cli
-cli.ensure_report_hosts = lambda: None
 original = cli.create_app
 def blocked(root):
     app = original(root)
