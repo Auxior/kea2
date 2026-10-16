@@ -1,13 +1,13 @@
 # 独立工具发布说明
 
-当前版本为 **0.1.3**，发布范围为 Kea2 许可允许的内部使用。产物是 Python 应用包，依赖 Python、ADB 和官方 Kea2 SDK；Windows 和 macOS 均无需依赖原开发目录或其他专项工具。工具不是捆绑 Python/ADB 的免安装桌面程序。
+当前版本为 **0.1.4**，发布范围为 Kea2 许可允许的内部使用。产物是 Python 应用包，依赖 Python、ADB 和官方 Kea2 SDK；Windows 和 macOS 均无需依赖原开发目录或其他专项工具。工具不是捆绑 Python/ADB 的免安装桌面程序。
 
 ## 发布内容
 
 | 文件 | 用途 |
 |---|---|
-| `kea2_workbench-0.1.3.tar.gz` | 源码分发包：应用、网页资源、默认设置、官方 `configs/`、双击启动脚本、两系统指南、测试与许可 |
-| `kea2_workbench-0.1.3-py3-none-any.whl` | 应用安装包：应用、网页资源、内置默认设置及许可；工作目录需另行执行 `kea2 init` |
+| `kea2_workbench-0.1.4.tar.gz` | 源码分发包：应用、网页资源、默认设置、官方 `configs/`、双击启动脚本、两系统指南、测试与许可 |
+| `kea2_workbench-0.1.4-py3-none-any.whl` | 应用安装包：应用、网页资源、内置默认设置及许可；工作目录需另行执行 `kea2 init` |
 | `SHA256SUMS.txt` | 两个分发包的 SHA-256 校验值，用于核对传输完整性 |
 
 源码包推荐用于首次部署，解压后双击 `start-windows.bat` 或 `start-macos.command` 自动安装依赖、准备 ADB 并打开工作台。启动脚本及共享的 `launch_workbench.py` 随源码包分发，macOS 脚本保留可执行权限；wheel 使用已有文档中的命令启动，不包含源码根目录的双击入口。`py3-none-any` 仅指工作台自身使用通用 Python 包，不表示依赖已离线捆绑或所有平台均完成真机验收。
@@ -46,7 +46,7 @@ py -3 -m venv .venv
 from hashlib import sha256
 from pathlib import Path
 
-packages = sorted(Path("dist").glob("kea2_workbench-0.1.3*"))
+packages = sorted(Path("dist").glob("kea2_workbench-0.1.4*"))
 lines = [f"{sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in packages
          if p.suffix in {".whl", ".gz"}]
 Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -56,7 +56,7 @@ Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8"
 
 ## 内部分发与安装
 
-将源码包、wheel 和校验文件交付到组织内约定的工具分发位置。用户按 [Windows](windows.md) 或 [macOS](macos.md) 指南选择一种安装方式，安装后用 `python -m kea_workbench` 或 `kea2-web` 启动。当前仓库没有配置发布远端；本地构建产物不等于已经上传至制品库或创建公开 Release。
+将源码包、wheel 和校验文件交付到组织内约定的工具分发位置。用户按 [Windows](windows.md) 或 [macOS](macos.md) 指南选择一种安装方式，安装后用 `python -m kea_workbench` 或 `kea2-web` 启动。本地构建产物不等于已经上传至制品库或创建公开 Release。
 
 不向公开 PyPI/GitHub 上传包含 Kea2 SDK、官方配置或 SDK 派生内容的分发包，除非已取得相应许可。第三方原文见 [THIRD_PARTY_LICENSE.txt](../THIRD_PARTY_LICENSE.txt)，其中明确限定自身内部使用及允许的关联方/承包方范围。
 
@@ -67,13 +67,13 @@ Path("dist/SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8"
 1. 在与目标机匹配的联网环境执行：
 
    ```sh
-   python -m pip download --index-url https://pypi.org/simple --only-binary=:all: --dest wheelhouse ./kea2_workbench-0.1.3-py3-none-any.whl
+   python -m pip download --index-url https://pypi.org/simple --only-binary=:all: --dest wheelhouse ./kea2_workbench-0.1.4-py3-none-any.whl
    ```
 
 2. 将工作台 wheel 和 `wheelhouse/` 一并传到离线机，以目标虚拟环境解释器执行：
 
    ```sh
-   python -m pip install --no-index --find-links=wheelhouse ./kea2_workbench-0.1.3-py3-none-any.whl
+   python -m pip install --no-index --find-links=wheelhouse ./kea2_workbench-0.1.4-py3-none-any.whl
    ```
 
 3. 初始化数据目录并按系统指南启动。ADB 也需另行准备；离线平台上报仅在目标机可访问内部平台/MinIO 时可用。
