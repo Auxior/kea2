@@ -84,7 +84,8 @@ class Publisher:
             secure=endpoint.scheme == "https",
             region="us-east-1",
             http_client=urllib3.PoolManager(
-                timeout=urllib3.Timeout(connect=5, read=15), retries=False
+                # urllib3 also uses the connect timeout while sending upload data.
+                timeout=urllib3.Timeout(connect=30, read=60), retries=False
             ),
         )
         self.bucket = cfg["bucket"]
