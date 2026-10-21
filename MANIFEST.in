@@ -3,6 +3,6 @@ include settings.example.json requirements.lock quicktest.py
 include launch_workbench.py start-windows.bat start-macos.command
 recursive-include docs *.md
 recursive-include configs *
-recursive-include tests *.py
+recursive-include tests *.py *.mjs
 recursive-include kea_workbench/static *
 global-exclude *.py[cod] .DS_Store

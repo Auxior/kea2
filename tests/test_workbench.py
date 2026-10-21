@@ -322,7 +322,7 @@ def test_background_upload_never_blocks_logs_and_cancellation_updates_same_task(
         def __init__(self, settings):
             pass
 
-        def upload(self, directory, run_id):
+        def upload(self, directory, run_id, progress=None):
             entered.set()
             release.wait(5)
             return "https://reports.example/runs/" + run_id + "/index.html"

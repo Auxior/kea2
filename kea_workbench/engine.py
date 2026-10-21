@@ -8,12 +8,16 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .delivery import Publisher, eligible, payload, send_report
+from .delivery import Publisher, UploadDeferred, eligible, payload, retryable, send_report
 from .models import ACTIVE, LABELS, PROJECTS, RunConfig
 from .reports import generate_native, make_snapshot, raw_directory, render_report
 from .storage import now, write_json
+
+SYNC_INTERVAL = 15
+DELIVERY_BUSY = {"queued", "preparing", "uploading", "reporting", "pending"}
 
 
 def process_options():
@@ -99,6 +103,7 @@ class Runtime:
         self.process = None
         self.thread = None
         self.delivery_thread = None
+        self.delivery_busy = False
         self.device_log_offset = 0
 
     def save(self):
@@ -108,7 +113,20 @@ class Runtime:
 
     def view(self):
         with self.lock:
-            return copy.deepcopy(self.record)
+            record = copy.deepcopy(self.record)
+            record["delivery"]["busy"] = self.delivery_busy
+            record["delivery"]["canRetry"] = (
+                eligible(record) and not self.delivery_busy
+                and record["delivery"]["status"] in {"failed", "retrying"}
+            )
+            return record
+
+    def delivery_state(self, **fields):
+        with self.lock:
+            self.record["delivery"].update(fields, updatedAt=now())
+            self.save()
+            with (self.directory / "delivery.log").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"at": now(), **fields}, ensure_ascii=False) + "\n")
 
     def log(self, line):
         line = re.sub(r"\x1b\[[0-9;]*m", "", line).rstrip()
@@ -161,6 +179,7 @@ class Manager:
         self.root, self.settings = root, settings
         self.runs = {}
         self.lock = threading.RLock()
+        self.closing = threading.Event()
         for path in sorted((root / "artifacts").glob("*/run.json")):
             run = json.loads(path.read_text(encoding="utf-8"))
             if run["status"] in ACTIVE:
@@ -172,7 +191,8 @@ class Manager:
                 )
                 if eligible(run):
                     run["delivery"].update(
-                        status="failed", error="服务中断，最终状态尚未同步，请补报"
+                        status="failed", error="服务中断，最终状态尚未同步，请补报",
+                        message="上次上报已中断，可立即重试", nextRetryAt=None,
                     )
                 else:
                     run["delivery"]["status"] = (
@@ -180,6 +200,15 @@ class Manager:
                     )
                 write_json(path, run)
                 render_report(path.parent, run)
+            elif eligible(run) and (
+                run["delivery"]["status"] in DELIVERY_BUSY | {"retrying"}
+                or (run["delivery"]["status"] == "uploaded" and run["delivery"].get("final") is False)
+            ):
+                run["delivery"].update(
+                    status="failed", error="上次上报未完成，请重试上报",
+                    message="上次上报已中断，可立即重试", nextRetryAt=None,
+                )
+                write_json(path, run)
             runtime = Runtime(path.parent, run, run.get("settings", settings))
             runtime.finished.set()
             self.runs[run["id"]] = runtime
@@ -341,11 +370,24 @@ class Manager:
 
     def deliver(self, runtime):
         publisher = None
+        delay = SYNC_INTERVAL
+        failures = 0
+        pending_run = None
         while True:
-            runtime.sync.wait(timeout=15)
-            runtime.sync.clear()
-            final = runtime.finished.is_set()
-            run = runtime.view()
+            runtime.sync.wait(timeout=delay)
+            with runtime.lock:
+                runtime.sync.clear()
+                final = runtime.finished.is_set()
+                if (
+                    self.closing.is_set() and final and not runtime.delivery_busy
+                    and runtime.record["delivery"]["status"] in {"retrying", "failed"}
+                ):
+                    return
+                run = runtime.view()
+                if final and pending_run and pending_run["status"] in ACTIVE:
+                    pending_run = None
+                if not final and run["status"] not in ACTIVE and pending_run is None:
+                    continue
             if not eligible(run):
                 if final:
                     with runtime.lock:
@@ -357,35 +399,82 @@ class Manager:
                 continue
             try:
                 with runtime.lock:
-                    render_report(runtime.directory, runtime.record)
+                    runtime.delivery_busy = True
+                    runtime.delivery_state(
+                        status="preparing", error="", nextRetryAt=None,
+                        message="正在准备最终报告" if final else "正在准备过程报告",
+                        attemptStartedAt=now(), progress=None,
+                    )
+                    if pending_run is None:
+                        run = runtime.view()
+                        render_report(runtime.directory, runtime.record)
                 snapshot = runtime.directory / ".platform-snapshot"
-                make_snapshot(runtime.directory, snapshot, run)
+                if pending_run is None:
+                    make_snapshot(runtime.directory, snapshot, run)
+                    pending_run = run
+                else:
+                    run = pending_run
+                final = run["status"] not in ACTIVE
                 publisher = publisher or Publisher(runtime.settings)
-                url = publisher.upload(snapshot, run["id"])
+                runtime.delivery_state(status="uploading", message="正在上传报告文件")
+                last_progress = [0.0, None]
+
+                def progress(value):
+                    stamp = time.monotonic()
+                    signature = (value["currentFile"], value["uploadedFiles"])
+                    if stamp - last_progress[0] >= 1 or signature != last_progress[1]:
+                        with runtime.lock:
+                            runtime.record["delivery"]["progress"] = value
+                            runtime.save()
+                        last_progress[:] = [stamp, signature]
+
+                url = publisher.upload(snapshot, run["id"], progress=progress)
                 body = payload(run, runtime.settings["platform"], url)
                 # Freeze each revision before a request; a failed revision is
                 # superseded only by the next immutable snapshot.
                 with runtime.lock:
-                    runtime.record["delivery"].update(
-                        status="pending",
+                    runtime.delivery_state(
+                        status="reporting", message="文件已上传，正在等待平台确认",
                         revision=body["externalFields"]["custom"]["sync"]["revision"],
                         reportUrl=url,
                     )
-                    runtime.save()
                 task_id = send_report(runtime.directory, body, runtime.settings["platform"])
                 with runtime.lock:
-                    runtime.record["delivery"].update(
-                        status="uploaded", taskId=task_id, updatedAt=now(), error=""
+                    runtime.delivery_state(
+                        status="uploaded", taskId=task_id, error="", final=final,
+                        lastSyncedAt=now(), nextRetryAt=None,
+                        message="最终报告已同步" if final else "过程报告已同步，等待下一周期",
                     )
-                    runtime.save()
+                    runtime.delivery_busy = False
+                failures = 0
+                delay = SYNC_INTERVAL
+                pending_run = None
+                if final:
+                    return
+                if runtime.finished.is_set():
+                    runtime.sync.set()
             except Exception as error:
+                deferred = isinstance(error, UploadDeferred)
+                failures = 0 if deferred else failures + 1
+                delay = min(SYNC_INTERVAL * (2 ** min(failures, 4)), 180) if retryable(error) else None
                 with runtime.lock:
-                    runtime.record["delivery"].update(
-                        status="failed", error=str(error), updatedAt=now()
+                    runtime.delivery_busy = False
+                    closing = self.closing.is_set()
+                    runtime.delivery_state(
+                        status="failed" if closing or delay is None else "retrying",
+                        error="" if deferred and not closing else str(error),
+                        nextRetryAt=None if closing or delay is None else (
+                            datetime.now(timezone.utc) + timedelta(seconds=delay)
+                        ).isoformat(),
+                        message=(
+                            "服务关闭前上报未完成，可在重启后重试" if closing else
+                            "上报失败，请检查错误后手动重试" if delay is None else
+                            f"已保存上传进度，{delay} 秒后自动继续" if deferred else
+                            f"上报失败，{delay} 秒后自动重试，也可立即重试"
+                        ),
                     )
-                    runtime.save()
-            if final:
-                return
+                if closing:
+                    return
 
     def stop_run(self, run_id):
         runtime = self.runs[run_id]
@@ -399,22 +488,40 @@ class Manager:
     def retry(self, run_id):
         runtime = self.runs[run_id]
         with runtime.lock:
-            if (
-                not runtime.finished.is_set()
-                or runtime.delivery_thread
-                and runtime.delivery_thread.is_alive()
-            ):
-                raise ValueError("执行或上报正在进行，请稍后重试")
+            if self.closing.is_set():
+                raise ValueError("工作台正在关闭，请重启后重试")
             if not eligible(runtime.view()):
                 raise ValueError("该运行未达到上报门槛")
-            runtime.sync.set()
-            runtime.delivery_thread = threading.Thread(
-                target=self.deliver, args=(runtime,), daemon=True
+            if runtime.delivery_busy or (
+                runtime.finished.is_set()
+                and runtime.record["delivery"].get("final") is True
+                and runtime.record["delivery"]["status"] == "uploaded"
+            ):
+                return runtime.view()
+            runtime.delivery_busy = True
+            runtime.delivery_state(
+                status="queued", error="", nextRetryAt=None,
+                message="重试已接受，正在排队上报",
             )
-            runtime.delivery_thread.start()
+            runtime.sync.set()
+            if not runtime.delivery_thread or not runtime.delivery_thread.is_alive():
+                runtime.delivery_thread = threading.Thread(
+                    target=self.deliver, args=(runtime,), daemon=True
+                )
+                runtime.delivery_thread.start()
         return runtime.view()
 
     def close(self):
+        self.closing.set()
+        for runtime in self.runs.values():
+            with runtime.lock:
+                if runtime.finished.is_set() and not runtime.delivery_busy:
+                    if runtime.record["delivery"]["status"] == "retrying":
+                        runtime.delivery_state(
+                            status="failed", nextRetryAt=None,
+                            message="服务已关闭，重启后可重试上报",
+                        )
+                    runtime.sync.set()
         for run_id, runtime in list(self.runs.items()):
             self.stop_run(run_id)
         for runtime in self.runs.values():

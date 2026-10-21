@@ -1,5 +1,7 @@
 import hashlib
+import json
 import mimetypes
+import threading
 import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit
@@ -9,6 +11,51 @@ import urllib3
 from minio import Minio
 
 from .storage import write_json
+
+UPLOAD_SLICE_SECONDS = 90
+
+
+class UploadDeferred(Exception):
+    """Yield between files while retaining confirmed uploads for the next pass."""
+
+
+def retryable(error):
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code >= 500 or error.response.status_code in {408, 429}
+    return not isinstance(error, (ValueError, FileNotFoundError, PermissionError))
+
+
+class UploadProgress:
+    def __init__(self, callback, total_files, total_bytes):
+        self.callback = callback
+        self.lock = threading.RLock()
+        self.value = dict(
+            totalFiles=total_files, uploadedFiles=0, totalBytes=total_bytes,
+            uploadedBytes=0, currentFile="", currentFileBytes=0, currentFileTotal=0,
+        )
+
+    def emit(self, **fields):
+        with self.lock:
+            self.value.update(fields)
+            if self.callback:
+                self.callback(dict(self.value))
+
+    def set_meta(self, object_name=None, total_length=None):
+        # MinIO calls this hook before transferring a (possibly multipart) file.
+        pass
+
+    def update(self, length):
+        with self.lock:
+            self.emit(currentFileBytes=min(
+                self.value["currentFileTotal"], self.value["currentFileBytes"] + length,
+            ))
+
+    def complete(self, size):
+        self.emit(
+            uploadedFiles=self.value["uploadedFiles"] + 1,
+            uploadedBytes=self.value["uploadedBytes"] + size,
+            currentFile="", currentFileBytes=0, currentFileTotal=0,
+        )
 
 
 def eligible(run):
@@ -90,41 +137,63 @@ class Publisher:
         )
         self.bucket = cfg["bucket"]
         self.prefix = cfg["prefix"].strip("/")
+        self.destination = [cfg["endpoint"].rstrip("/"), self.bucket, self.prefix]
         self.base = (
             cfg.get("publicBaseUrl") or f"{cfg['endpoint'].rstrip('/')}/{self.bucket}"
         ).rstrip("/")
         self.sent = {}
 
-    def upload(self, directory: Path, run_id):
-        deadline = time.monotonic() + 90
+    def upload(self, directory: Path, run_id, progress=None):
+        deadline = time.monotonic() + UPLOAD_SLICE_SECONDS
+        state_file = directory / ".upload-state.json"
+        target = [*self.destination, run_id]
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            files = state.get("files") if isinstance(state, dict) else None
+            self.sent = files if (
+                isinstance(files, dict) and state.get("target") == target
+                and all(isinstance(v, str) for v in files.values())
+            ) else {}
+        except (OSError, ValueError, KeyError, TypeError):
+            self.sent = {}
         paths = sorted(
             path
             for path in directory.rglob("*")
             if path.is_file()
+            and path != state_file
             and not path.name.endswith(".tmp")
             and path.name != "report-generation.log"
         )
         entry = directory / "index.html"
         paths = [p for p in paths if p != entry] + [entry]
+        tracker = UploadProgress(progress, len(paths), sum(p.stat().st_size for p in paths))
+        tracker.emit()
+        sent_this_pass = 0
         for path in paths:
-            if time.monotonic() >= deadline:
-                raise TimeoutError("本次过程报告上传超过 90 秒，下一周期继续同步")
             relative = path.relative_to(directory).as_posix()
-            data = path.read_bytes()
-            digest = hashlib.sha256(data).hexdigest()
+            size = path.stat().st_size
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
             if relative != "index.html" and self.sent.get(relative) == digest:
+                tracker.complete(size)
                 continue
+            tracker.emit(currentFile=relative, currentFileBytes=0, currentFileTotal=size)
+            # Check only files that still need sending. A large file can finish
+            # after this cooperative budget; confirmed files survive retries.
+            if sent_this_pass and time.monotonic() >= deadline:
+                raise UploadDeferred("本轮上传时间预算已用完，已保存进度，将自动继续")
             key = f"{self.prefix}/runs/{run_id}/{relative}"
-            from io import BytesIO
-
-            self.client.put_object(
+            self.client.fput_object(
                 self.bucket,
                 key,
-                BytesIO(data),
-                len(data),
+                str(path),
                 content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                progress=tracker,
             )
             self.sent[relative] = digest
+            sent_this_pass += 1
+            write_json(state_file, {"target": target, "files": self.sent})
+            tracker.complete(size)
         return f"{self.base}/{quote(self.prefix)}/runs/{quote(run_id)}/index.html"
 
 

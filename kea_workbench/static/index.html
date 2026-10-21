@@ -239,11 +239,12 @@
                 <span>Crash / ANR</span><strong id="findings">0</strong>
               </div>
               <div>
-                <span>平台上报</span><strong id="delivery">待达标</strong>
+                <span>平台上报</span><strong id="delivery" role="status" aria-atomic="true">待达标</strong>
               </div>
             </div>
             <p id="run-error" class="error-copy" hidden></p>
             <p id="delivery-error" class="error-copy" hidden></p>
+            <p id="delivery-detail" class="field-help" hidden></p>
             <div class="label-row">
               <h3>最近执行日志</h3>
               <label class="follow"
@@ -280,6 +281,7 @@
                 hidden
                 >平台记录 ↗</a
               ><button id="retry" class="text-button" hidden>重试上报</button>
+              <a id="delivery-log" class="text-button" target="_blank" rel="noopener" hidden>上报日志</a>
             </div>
             <details>
               <summary>本次配置快照</summary>

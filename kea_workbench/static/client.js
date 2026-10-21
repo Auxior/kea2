@@ -3,6 +3,11 @@ const active = new Set(["preparing", "running", "stopping", "finalizing"]);
 const deliveryLabels = {
   waiting: "待达标",
   pending: "同步中",
+  queued: "已排队",
+  preparing: "准备报告",
+  uploading: "上传文件中",
+  reporting: "等待平台确认",
+  retrying: "等待自动重试",
   uploaded: "已上报",
   failed: "上报失败",
   skipped: "未达门槛",
@@ -13,6 +18,28 @@ let settings,
   selected,
   runs = [],
   busy = false;
+const retryRequests = new Set();
+const retryErrors = new Map();
+function deliveryLabel(run) {
+  const d = run.delivery;
+  if (d.status === "uploaded")
+    return d.final === true ? "最终报告已同步" : d.final === false ? "过程报告已同步" : "已上报";
+  return deliveryLabels[d.status] || d.status;
+}
+function deliveryDetail(run) {
+  const d = run.delivery, p = d.progress;
+  const parts = [d.message || ""];
+  if (p && ["uploading", "retrying"].includes(d.status)) {
+    const mib = (bytes) => (bytes / 1048576).toFixed(1);
+    parts.push(`已同步 ${p.uploadedFiles}/${p.totalFiles} 个文件，${mib(p.uploadedBytes + p.currentFileBytes)}/${mib(p.totalBytes)} MiB`);
+    if (p.currentFile) parts.push(`当前文件：${p.currentFile}`);
+  }
+  if (d.nextRetryAt)
+    parts.push(`下次自动重试：${new Date(d.nextRetryAt).toLocaleTimeString("zh-CN", { hour12: false })}`);
+  if (d.lastSyncedAt)
+    parts.push(`上次同步成功：${new Date(d.lastSyncedAt).toLocaleString("zh-CN", { hour12: false })}`);
+  return parts.filter(Boolean).join("；");
+}
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -124,11 +151,13 @@ function showRun(run) {
   $("progress").value = run.elapsedSeconds;
   $("steps").textContent = run.steps.toLocaleString();
   $("findings").textContent = run.findings;
-  $("delivery").textContent =
-    deliveryLabels[run.delivery.status] || run.delivery.status;
+  $("delivery").textContent = deliveryLabel(run);
+  $("delivery-detail").textContent = deliveryDetail(run);
+  $("delivery-detail").hidden = !$("delivery-detail").textContent;
+  if (run.delivery.busy || run.delivery.status === "uploaded") retryErrors.delete(run.id);
   for (const [id, text] of [
     ["run-error", run.error],
-    ["delivery-error", run.delivery.error],
+    ["delivery-error", retryRequests.has(run.id) ? "" : (retryErrors.get(run.id) || run.delivery.error)],
   ]) {
     $(id).textContent = text || "";
     $(id).hidden = !text;
@@ -148,8 +177,17 @@ function showRun(run) {
   $("platform-link").href =
     `${settings.platform.frontend}/task-center?taskId=${encodeURIComponent(run.delivery.taskId || "")}`;
   $("platform-link").hidden = !run.delivery.taskId;
-  $("retry").hidden =
-    run.delivery.status !== "failed" || active.has(run.status);
+  const requesting = retryRequests.has(run.id);
+  const retryable = run.delivery.canRetry ?? (
+    run.delivery.status === "failed" && !active.has(run.status)
+  );
+  const syncing = run.delivery.busy || requesting;
+  $("retry").hidden = !(retryable || syncing);
+  $("retry").disabled = !!syncing;
+  $("retry").textContent = requesting ? "正在提交重试…" : syncing ? "正在上报…" : "立即重试上报";
+  $("retry").setAttribute("aria-busy", String(!!syncing));
+  $("delivery-log").href = `/reports/${run.id}/delivery.log`;
+  $("delivery-log").hidden = !run.delivery.attemptStartedAt;
   $("snapshot").textContent = JSON.stringify(run.configuration, null, 2);
   $("run-id").textContent = run.id;
 }
@@ -159,7 +197,7 @@ function showHistory() {
   $("history").innerHTML = runs
     .map(
       (r) =>
-        `<tr><td><strong>${esc(r.configuration.package)}</strong><small>${esc(r.device.model)}</small></td><td>${esc(new Date(r.startedAt).toLocaleString("zh-CN", { hour12: false }))}</td><td>${r.configuration.runningMinutes} 分钟 / ${r.configuration.maxStep.toLocaleString()} 步</td><td><span class="badge" data-state="${esc(r.status)}">${esc(r.statusLabel)}</span></td><td>${esc(deliveryLabels[r.delivery.status] || r.delivery.status)}</td><td><button class="text-button" data-run="${r.id}">查看过程</button>${!active.has(r.status) || r.qualifiedAt ? `<a class="text-button" href="/reports/${r.id}/index.html" target="_blank" rel="noopener">报告 ↗</a>` : ""}</td></tr>`,
+        `<tr><td><strong>${esc(r.configuration.package)}</strong><small>${esc(r.device.model)}</small></td><td>${esc(new Date(r.startedAt).toLocaleString("zh-CN", { hour12: false }))}</td><td>${r.configuration.runningMinutes} 分钟 / ${r.configuration.maxStep.toLocaleString()} 步</td><td><span class="badge" data-state="${esc(r.status)}">${esc(r.statusLabel)}</span></td><td>${esc(deliveryLabel(r))}</td><td><button class="text-button" data-run="${r.id}">查看过程</button>${!active.has(r.status) || r.qualifiedAt ? `<a class="text-button" href="/reports/${r.id}/index.html" target="_blank" rel="noopener">报告 ↗</a>` : ""}</td></tr>`,
     )
     .join("");
 }
@@ -208,11 +246,27 @@ $("stop").addEventListener("click", async () => {
   }
 });
 $("retry").addEventListener("click", async () => {
+  const runId = selected;
+  if (!runId || retryRequests.has(runId)) return;
+  retryRequests.add(runId);
+  retryErrors.delete(runId);
+  const current = runs.find((run) => run.id === runId);
+  if (current) showRun(current);
+  $("delivery-error").hidden = true;
+  $("delivery-detail").hidden = false;
+  $("delivery-detail").textContent = "正在提交重试请求…";
   try {
-    await post(`/api/runs/${selected}/retry`);
-    await poll();
+    const run = await post(`/api/runs/${runId}/retry`);
+    runs = runs.map((r) => r.id === runId ? run : r);
+    if (selected === runId) showRun(run);
   } catch (error) {
-    message(error.message);
+    retryErrors.set(runId, error.message);
+  } finally {
+    retryRequests.delete(runId);
+    if (selected === runId) {
+      const run = runs.find((r) => r.id === runId);
+      if (run) showRun(run);
+    }
   }
 });
 $("history").addEventListener("click", (event) => {

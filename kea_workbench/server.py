@@ -87,7 +87,7 @@ def create_app(root=None):
         detail(run_id)
         return manager.stop_run(run_id)
 
-    @app.post("/api/runs/{run_id}/retry")
+    @app.post("/api/runs/{run_id}/retry", status_code=202)
     def retry(run_id: str):
         detail(run_id)
         try:
