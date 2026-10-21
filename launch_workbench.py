@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import tomllib
+import uuid
 from urllib.error import URLError
 from urllib.request import ProxyHandler, build_opener, urlopen
 import webbrowser
@@ -186,7 +187,7 @@ def prepare_adb(root, env, python):
     say("ADB 检查通过；手机可以在工作台打开后连接。")
 
 
-def saved_address(path, root, pid=None):
+def saved_address(path, root, launch_id=None):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if (
@@ -194,7 +195,7 @@ def saved_address(path, root, pid=None):
             or data.get("root") != str(root)
             or not isinstance(data.get("port"), int)
             or not 1 <= data["port"] <= 65535
-            or pid is not None and data.get("pid") != pid
+            or launch_id is not None and data.get("launchId") != launch_id
         ):
             return None
         return f"http://127.0.0.1:{data['port']}/"
@@ -202,12 +203,14 @@ def saved_address(path, root, pid=None):
         return None
 
 
-def wait_ready(process, root, ready_file, timeout=30):
+def wait_ready(process, root, ready_file, launch_id, timeout=30):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError("工作台服务已退出，请查看上方启动日志。")
-        url = saved_address(ready_file, root, process.pid)
+        # Windows venv's python.exe redirects to another process, so Popen.pid
+        # need not equal the service's os.getpid(). Match this launch instead.
+        url = saved_address(ready_file, root, launch_id)
         if url and healthy(url, root):
             return url
         time.sleep(0.2)
@@ -258,13 +261,15 @@ def main():
             say("正在初始化官方 Kea2 配置……")
             run_checked([str(python), "-m", "kea2.cli", "init"], cwd=root, env=env)
         say("正在启动工作台。关闭此窗口会退出服务；建议先停止测试并等待报告生成。")
+        launch_id = uuid.uuid4().hex
         process = subprocess.Popen(
             [str(python), "-m", "kea_workbench", "--root", str(root),
              "--host", "127.0.0.1", "--port", str(port), "--watch-parent",
-             "--ready-file", str(ready_file)], cwd=root, env=env, stdin=subprocess.PIPE,
+             "--ready-file", str(ready_file), "--launch-id", launch_id],
+            cwd=root, env=env, stdin=subprocess.PIPE,
         )
         try:
-            url = wait_ready(process, root, ready_file)
+            url = wait_ready(process, root, ready_file, launch_id)
             open_page(url)
             return process.wait()
         finally:

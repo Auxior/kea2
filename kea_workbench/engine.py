@@ -28,13 +28,15 @@ def interrupt_process(process):
 
 def adb(serial, *args):
     return subprocess.check_output(
-        ["adb", "-s", serial, *args], encoding="utf-8", errors="replace", timeout=15
+        ["adb", "-s", serial, *args], stdin=subprocess.DEVNULL,
+        encoding="utf-8", errors="replace", timeout=15
     ).strip()
 
 
 def devices():
     output = subprocess.check_output(
-        ["adb", "devices", "-l"], encoding="utf-8", errors="replace", timeout=10
+        ["adb", "devices", "-l"], stdin=subprocess.DEVNULL,
+        encoding="utf-8", errors="replace", timeout=10
     )
     found = []
     for line in output.splitlines()[1:]:
@@ -263,6 +265,9 @@ class Manager:
             process = subprocess.Popen(
                 runtime.record["command"],
                 cwd=runtime.directory,
+                # The service's stdin belongs exclusively to the launcher
+                # watchdog; test processes must not inherit that control pipe.
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

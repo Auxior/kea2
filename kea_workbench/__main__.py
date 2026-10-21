@@ -67,6 +67,7 @@ def main():
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--watch-parent", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--ready-file", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--launch-id", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("端口必须为 0–65535")
@@ -83,7 +84,10 @@ def main():
         print(f"工作台访问地址：http://{browser_host}:{port}/", flush=True)
         server = uvicorn.Server(uvicorn.Config(create_app(root), host=args.host, port=port))
         if args.ready_file:
-            write_json(args.ready_file, {"root": str(root), "port": port, "pid": os.getpid()})
+            write_json(args.ready_file, {
+                "root": str(root), "port": port, "pid": os.getpid(),
+                "launchId": args.launch_id,
+            })
         if args.watch_parent:
             if hasattr(signal, "SIGHUP"):
                 signal.signal(signal.SIGHUP, lambda *_: setattr(server, "should_exit", True))

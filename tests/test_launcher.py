@@ -17,15 +17,38 @@ from kea_workbench.__main__ import bind_listener
 
 
 @pytest.mark.parametrize("payload,expected", [
-    ({"application": "kea2-workbench", "root": "/work"}, True),
-    ({"application": "kea2-workbench", "root": "/other"}, False),
-    ({"application": "other", "root": "/work"}, False),
+    ({"application": "kea2-workbench", "root": str(Path("/work"))}, True),
+    ({"application": "kea2-workbench", "root": str(Path("/other"))}, False),
+    ({"application": "other", "root": str(Path("/work"))}, False),
     ([], False),
 ])
 def test_readiness_rejects_other_services_and_directories(monkeypatch, payload, expected):
     response = lambda *args, **kwargs: io.BytesIO(json.dumps(payload).encode())
     monkeypatch.setattr(launcher, "build_opener", lambda *args: SimpleNamespace(open=response))
     assert launcher.healthy("http://127.0.0.1:4320/", Path("/work")) is expected
+
+
+def test_readiness_accepts_redirected_python_pid_and_rejects_stale_launch(tmp_path, monkeypatch):
+    state = tmp_path / "ready.json"
+    state.write_text(json.dumps({
+        "root": str(tmp_path), "port": 4320, "pid": 222, "launchId": "current",
+    }), encoding="utf-8")
+    process = SimpleNamespace(pid=111, poll=lambda: None)
+    monkeypatch.setattr(launcher, "healthy", lambda url, root: True)
+    assert launcher.wait_ready(process, tmp_path, state, "current", timeout=1) == (
+        "http://127.0.0.1:4320/"
+    )
+    assert launcher.saved_address(state, tmp_path, "previous") is None
+    assert launcher.saved_address(state, tmp_path / "other", "current") is None
+    # A healthy service plus an old state file must not satisfy a fresh launch.
+    with pytest.raises(RuntimeError, match="超时"):
+        launcher.wait_ready(process, tmp_path, state, "previous", timeout=0.01)
+    assert launcher.saved_address(state, tmp_path) == "http://127.0.0.1:4320/"
+    legacy = json.loads(state.read_text(encoding="utf-8"))
+    del legacy["launchId"]
+    state.write_text(json.dumps(legacy), encoding="utf-8")
+    assert launcher.saved_address(state, tmp_path, "current") is None
+    assert launcher.saved_address(state, tmp_path) == "http://127.0.0.1:4320/"
 
 
 @pytest.mark.parametrize("ready", [True, False])
@@ -135,7 +158,10 @@ def test_listener_reserves_preferred_port_and_falls_back_without_a_race():
 
 
 @pytest.mark.parametrize("occupied", [False, True])
-def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp_path, monkeypatch, occupied):
+@pytest.mark.parametrize("redirected", [False, True])
+def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(
+    tmp_path, monkeypatch, occupied, redirected,
+):
     repository = Path(__file__).resolve().parents[1]
     (tmp_path / "pyproject.toml").touch()
     (tmp_path / "configs").mkdir()
@@ -158,6 +184,12 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
     processes = []
 
     def popen(*args, **kwargs):
+        if redirected:
+            args = ([
+                sys.executable, "-c",
+                "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))",
+                *args[0],
+            ], *args[1:])
         process = original_popen(*args, **kwargs)
         processes.append(process)
         return process
@@ -167,6 +199,10 @@ def test_real_service_is_ready_before_browser_and_duplicate_launch_reuses_it(tmp
 
     def browser(url):
         assert launcher.healthy(url, tmp_path)
+        state = json.loads((tmp_path / "data/launcher.json").read_text(encoding="utf-8"))
+        assert state["launchId"]
+        if redirected:
+            assert state["pid"] != processes[-1].pid
         if occupied:
             assert url != f"http://127.0.0.1:{port}/"
         else:
@@ -204,6 +240,106 @@ def wait_for(test, timeout=12):
             return
         time.sleep(0.05)
     raise AssertionError("等待测试条件超时")
+
+
+@pytest.mark.parametrize("stop_task", [False, True])
+def test_task_progress_stop_and_native_report_with_launcher_watchdog_active(tmp_path, stop_task):
+    repository = Path(__file__).resolve().parents[1]
+    # Exercise the real subprocess boundaries without a device or Kea2 run.
+    sdk = tmp_path / "sdk/kea2"
+    sdk.mkdir(parents=True)
+    (sdk / "__init__.py").touch()
+    (sdk / "cli.py").write_text("""import sys
+from pathlib import Path
+assert sys.stdin.read() == ''
+(Path(sys.argv[-1]) / 'bug_report.html').write_text('Native report', encoding='utf-8')
+print('Native report generated', flush=True)
+""", encoding="utf-8")
+    adb_worker = """import sys
+assert sys.stdin.read() == ''
+if sys.argv[1:3] == ['devices', '-l']:
+    print('List of devices attached\\nsmoke device model:Smoke')
+elif sys.argv[4:6] == ['pm', 'path']:
+    print('package:smoke')
+"""
+    worker = """import signal, sys, time
+from pathlib import Path
+if sys.platform == 'win32':
+    signal.signal(signal.SIGBREAK, signal.default_int_handler)
+assert sys.stdin.read() == ''
+Path('raw/res_smoke').mkdir(parents=True)
+print('[New Iteration] Elapsed: 1.0s', flush=True)
+print('Sending monkeyEvent (125 / 99999)', flush=True)
+try:
+    while STOP_TASK:
+        time.sleep(.1)
+except KeyboardInterrupt:
+    pass
+print('Cleanup complete', flush=True)
+""".replace("STOP_TASK", repr(stop_task))
+    driver = """import sys, threading, time
+from kea_workbench import engine
+from kea_workbench.models import RunConfig
+import kea_workbench.__main__ as cli
+check_output = engine.subprocess.check_output
+engine.subprocess.check_output = lambda command, **kwargs: check_output(
+    [sys.executable, '-c', ADB_WORKER, *command[1:]], **kwargs)
+engine.command = lambda *args: [sys.executable, '-u', '-c', WORKER]
+original = cli.create_app
+def app(root):
+    application = original(root)
+    def start():
+        time.sleep(.2)
+        application.state.manager.start(RunConfig(serial='smoke', platformEnabled=False))
+    threading.Thread(target=start, daemon=True).start()
+    return application
+cli.create_app = app
+sys.argv = ['server', '--root', sys.argv[1], '--port', '0', '--watch-parent']
+cli.main()
+""".replace("ADB_WORKER", repr(adb_worker)).replace("WORKER", repr(worker))
+    with (tmp_path / "service.log").open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(
+            [sys.executable, "-c", driver, str(tmp_path)], cwd=repository,
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join([str(repository), str(sdk.parent)]),
+                "PYTHONUTF8": "1",
+            },
+            stdin=subprocess.PIPE, stdout=log, stderr=log,
+        )
+        try:
+            def progressed():
+                logs = list((tmp_path / "artifacts").glob("*/console.log"))
+                return logs and "Sending monkeyEvent (125" in logs[0].read_text(encoding="utf-8")
+
+            # No input on the launcher's control pipe is needed to start a task.
+            wait_for(progressed)
+            if not stop_task:
+                wait_for(lambda: list((tmp_path / "artifacts").glob("*/raw/*/bug_report.html")))
+            assert process.poll() is None
+            process.stdin.write(b"s")
+            process.stdin.flush()
+            assert process.wait(timeout=15) == 0
+        finally:
+            process.stdin.close()
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+    directory = next((tmp_path / "artifacts").iterdir())
+    record = json.loads((directory / "run.json").read_text(encoding="utf-8"))
+    assert record["status"] == ("cancelled" if stop_task else "completed")
+    assert record["steps"] == 125
+    assert "Cleanup complete" in record["recentLogs"]
+    assert (directory / "index.html").is_file()
+    assert (directory / "raw/res_smoke/bug_report.html").read_text(encoding="utf-8") == (
+        "Native report"
+    )
+    assert "Native report generated" in (directory / "report-generation.log").read_text(
+        encoding="utf-8"
+    )
 
 
 @pytest.mark.parametrize("termination", ["kill", "hangup", "terminal"])

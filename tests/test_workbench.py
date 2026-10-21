@@ -22,7 +22,7 @@ from kea_workbench.storage import load_settings, write_json
 
 @pytest.fixture
 def settings():
-    return json.loads((Path(__file__).parents[1] / "settings.example.json").read_text())
+    return json.loads((Path(__file__).parents[1] / "settings.example.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture
@@ -253,7 +253,7 @@ def test_platform_acknowledgement_verifies_project_and_revision(
 def test_report_retains_final_data_and_escapes_logs(tmp_path, record):
     record.update(status="interrupted", recentLogs=["<script>alert(1)</script>"])
     render_report(tmp_path, record)
-    html = (tmp_path / "index.html").read_text()
+    html = (tmp_path / "index.html").read_text(encoding="utf-8")
     assert "异常终止" in html and "300.0 秒" in html
     assert "&lt;script&gt;" in html and "<script>alert(1)</script>" not in html
 
@@ -294,7 +294,7 @@ def test_restart_exposes_interrupted_report_and_sorts_by_start_time(tmp_path, re
     assert recovered["delivery"]["status"] == "failed"
     assert recovered["delivery"]["taskId"] == "existing-task"
     assert manager.runs["a-newer"].view()["delivery"]["status"] == "skipped"
-    assert "异常终止" in (tmp_path / "artifacts/z-older/index.html").read_text()
+    assert "异常终止" in (tmp_path / "artifacts/z-older/index.html").read_text(encoding="utf-8")
 
 
 def test_background_upload_never_blocks_logs_and_cancellation_updates_same_task(

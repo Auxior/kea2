@@ -19,6 +19,7 @@ def generate_native(directory: Path):
     with (directory / "report-generation.log").open("a", encoding="utf-8") as log:
         result = subprocess.run(
             [sys.executable, "-m", "kea2.cli", "report", "-p", str(raw)],
+            stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.STDOUT,
             timeout=90,
