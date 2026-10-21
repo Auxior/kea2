@@ -1,6 +1,6 @@
 # Kea2 Android 测试工作台
 
-基于官方 [Kea2](https://github.com/ecnusse/Kea2) 1.2.4 的独立本机 Web 工具，当前工具版本 **0.1.4**。支持 Android 设备选择、随机探索参数配置、启动与停止、实时日志、本地 HTML 报告，以及向测试平台持续同步结果。Windows 和 macOS 均使用 Python 安装，在浏览器中操作；无需安装其他工作台或部署测试平台即可完成本地测试。
+基于官方 [Kea2](https://github.com/ecnusse/Kea2) 1.2.4 的独立本机 Web 工具，当前工具版本 **0.1.5**。支持 Android 设备选择、随机探索参数配置、启动与停止、实时日志、本地 HTML 报告，以及向测试平台持续同步结果。Windows 和 macOS 均使用 Python 安装，在浏览器中操作；无需安装其他工作台或部署测试平台即可完成本地测试。
 
 独立分发形式为 Python 源码包（`.tar.gz`）和通用 wheel（`.whl`）。需预装 Python 3.11+；源码包的双击入口自动准备工具依赖及缺失的 ADB，也支持手动安装。请按所用系统的完整指南操作：
 
