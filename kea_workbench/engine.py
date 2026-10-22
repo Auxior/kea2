@@ -58,6 +58,32 @@ def devices():
     return found
 
 
+def failure_reason(runtime, code):
+    """Kea2 reports a Fastbot abort with its generic error code; name the actual failure."""
+    try:
+        with (runtime.directory / "console.log").open("rb") as stream:
+            stream.seek(max(stream.seek(0, os.SEEK_END) - 262144, 0))
+            tail = stream.read().decode("utf-8", errors="replace")
+    except OSError:
+        tail = ""
+    if "Fastbot Aborted." not in tail:
+        return f"Kea2 异常结束，退出码 {code}；请查看完整日志"
+    serial = runtime.record["configuration"]["serial"]
+    try:
+        online = any(d["serial"] == serial and d["state"] == "device" for d in devices())
+    except (OSError, subprocess.SubprocessError):
+        online = None
+    if online is False:
+        return (
+            f"测试设备连接已断开，Fastbot 无法继续，测试提前结束（退出码 {code}）；"
+            "已保留中断前的数据，请检查 USB / 无线调试连接后重新执行"
+        )
+    return (
+        f"设备端 Fastbot 进程意外退出，测试提前结束（退出码 {code}）；已保留中断前的数据。"
+        f"常见原因为设备内存不足或系统清理后台进程，请查看 fastbot_{runtime.record['id']}.log 末尾"
+    )
+
+
 def command(config: RunConfig, directory: Path, run_id):
     args = [
         sys.executable,
@@ -328,6 +354,7 @@ class Manager:
             reader.join(timeout=5)
             runtime.read_findings()
             runtime.qualify()
+            reason = failure_reason(runtime, process.returncode)
             with runtime.lock:
                 runtime.record["exitCode"] = process.returncode
                 if process.returncode in {1, 2, 3}:
@@ -347,9 +374,7 @@ class Manager:
                     else "completed"
                 )
                 if runtime.record["status"] == "interrupted":
-                    runtime.record["error"] = (
-                        f"Kea2 异常结束，退出码 {process.returncode}；请查看完整日志"
-                    )
+                    runtime.record["error"] = reason
                 runtime.record["endedAt"] = now()
                 runtime.save()
             native = raw_directory(runtime.directory)

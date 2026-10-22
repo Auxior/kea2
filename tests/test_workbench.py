@@ -358,3 +358,30 @@ def test_background_upload_never_blocks_logs_and_cancellation_updates_same_task(
     finally:
         release.set()
         manager.close()
+
+
+@pytest.mark.parametrize(
+    "console, found, expected",
+    [
+        ("Traceback\nRuntimeError: boom\n", [], "Kea2 异常结束，退出码 4；请查看完整日志"),
+        ("RuntimeError: Fastbot Aborted.\n", [{"serial": "device", "state": "device"}],
+         "设备端 Fastbot 进程意外退出"),
+        ("RuntimeError: Fastbot Aborted.\n", [{"serial": "device", "state": "offline"}],
+         "测试设备连接已断开"),
+        ("RuntimeError: Fastbot Aborted.\n", OSError("adb missing"), "设备端 Fastbot 进程意外退出"),
+    ],
+)
+def test_fastbot_abort_is_named_instead_of_generic_exit_code(
+    tmp_path, record, settings, monkeypatch, console, found, expected
+):
+    def listing():
+        if isinstance(found, Exception):
+            raise found
+        return found
+
+    monkeypatch.setattr(engine, "devices", listing)
+    (tmp_path / "console.log").write_text("x" * 300000 + console, encoding="utf-8")
+    reason = engine.failure_reason(Runtime(tmp_path, record, settings), 4)
+    assert reason.startswith(expected)
+    if "Fastbot" in console:
+        assert "退出码 4" in reason and "已保留中断前的数据" in reason
