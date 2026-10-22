@@ -1,6 +1,6 @@
 # macOS 使用指南
 
-适用版本：Kea2 Android 测试工作台 0.1.5 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
+适用版本：Kea2 Android 测试工作台 0.1.6 / Kea2 1.2.4。命令在 **Terminal / zsh** 中执行。示例路径 `$HOME/Tools/kea2-workbench` 表示解压后的源码根目录，请替换为实际路径。
 
 ## 1. 环境要求
 
@@ -30,7 +30,7 @@ command -v adb
 
 ### 推荐：双击自动准备和启动
 
-完整解压 0.1.5 源码包后，双击根目录的 `start-macos.command`，在 Terminal 中自动启动。需先安装 Python 3.11+；脚本会查找已有虚拟环境和 PATH 中的 Python，并兼容 Homebrew 常用目录。脚本以自身所在目录作为工作目录，支持含空格和中文的路径。
+完整解压 0.1.6 源码包后，双击根目录的 `start-macos.command`，在 Terminal 中自动启动。需先安装 Python 3.11+；脚本会查找已有虚拟环境和 PATH 中的 Python，并兼容 Homebrew 常用目录。脚本以自身所在目录作为工作目录，支持含空格和中文的路径。
 
 启动过程自动创建或复用 `.venv`，核验应用版本、直接依赖和依赖完整性；需要安装时使用官方 PyPI。ADB 优先使用本工具 `tools/platform-tools`，其次查找 PATH、`ANDROID_HOME` / `ANDROID_SDK_ROOT` 和常见 SDK 目录；缺失时下载官方 macOS Platform-Tools 到本工具 `tools/`，不会更改系统 PATH。若 `configs/` 缺失会自动初始化。服务就绪后打开默认浏览器，默认地址 `http://127.0.0.1:4320/`。
 
@@ -54,7 +54,7 @@ KEA2_PORT=4321 KEA2_PIP_INDEX_URL=https://pypi.org/simple ./start-macos.command
 
 ### 使用源码分发包
 
-解压维护者提供的 `kea2_workbench-0.1.5.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
+解压维护者提供的 `kea2_workbench-0.1.6.tar.gz`，进入包含 `pyproject.toml`、`settings.example.json` 和 `configs/` 的目录：
 
 ```sh
 cd "$HOME/Tools/kea2-workbench"
@@ -83,7 +83,7 @@ python3 -m venv .venv
 mkdir -p "$HOME/Kea2Data"
 cd "$HOME/Kea2Data"
 python3 -m venv .venv
-./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.5-py3-none-any.whl
+./.venv/bin/python -m pip install --index-url https://pypi.org/simple ./kea2_workbench-0.1.6-py3-none-any.whl
 ./.venv/bin/python -m kea2.cli init
 ```
 
@@ -189,7 +189,7 @@ adb devices -l
 | 电脑睡眠或拔线后异常终止 | 保持唤醒/连接，查看日志与设备残留进程后新建任务；不会自动续跑旧任务 |
 | 原生报告缺失 | 查看 `console.log`，如果生成过补充报告，还可查 `report-generation.log`；清理未完成时数据可能不完整 |
 
-遇到上述缓存目录错误时，关闭工作台，在包含本次修复的源码根目录执行以下命令，再启动工作台。安装 0.1.5 后，让测试子进程使用修复后的入口：
+遇到上述缓存目录错误时，关闭工作台，在包含本次修复的源码根目录执行以下命令，再启动工作台。安装 0.1.6 后，让测试子进程使用修复后的入口：
 
 ```sh
 ./.venv/bin/python -m pip install --index-url https://pypi.org/simple --force-reinstall --no-deps .
