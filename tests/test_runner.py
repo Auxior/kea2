@@ -100,3 +100,30 @@ def test_config_copy_errors_are_not_hidden_and_patch_is_restored(sdk_configs, mo
     with pytest.raises(PermissionError, match="not writable"):
         runner.main()
     assert ConfigVersionSanitizer._copy_new_configs is original
+
+
+def test_exited_fastbot_is_not_stopped_so_results_are_still_collected(monkeypatch):
+    import kea2.cli as cli
+    from kea2.fastbotManager import FastbotManager
+
+    original = FastbotManager.stopMonkey
+    requests, results = [], []
+
+    def fastbot(code):
+        manager = object.__new__(FastbotManager)
+        manager.thread = SimpleNamespace(poll=lambda: code)
+        manager.request = lambda **kwargs: requests.append(kwargs["path"]) or SimpleNamespace(
+            text="Monkey Stopped"
+        )
+        return manager
+
+    def run():
+        # Kea2 calls stopMonkey from its cleanup block after Fastbot aborted.
+        for code in [255, -1, None]:
+            results.append(fastbot(code).stopMonkey())
+
+    monkeypatch.setattr(cli, "main", run)
+    runner.main()
+    assert requests == ["/stopMonkey"]
+    assert results == [None, None, None]
+    assert FastbotManager.stopMonkey is original
